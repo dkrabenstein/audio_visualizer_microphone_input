@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pattern Compiler (Node.js PC Host)</title>
+<style>
+:root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#8b90a4;
+      --ok:#4ade80;--err:#f87171;--acc:#60a5fa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+     font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.wrap{max-width:860px;margin:0 auto;padding:20px}
+h1{font-size:16px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
+.sub{color:var(--dim);font-size:12px;margin-bottom:18px}
+.panel{background:var(--panel);border:1px solid var(--line);
+       border-radius:8px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:11px;text-transform:uppercase;
+      letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
+input[type=text]{width:100%;background:#0b0c10;border:1px solid var(--line);
+      color:var(--fg);padding:10px;border-radius:5px;font:inherit}
+input[type=text]:focus{outline:none;border-color:var(--acc)}
+#status{margin-top:8px;font-size:12px;min-height:18px}
+#status.ok{color:var(--ok)} #status.err{color:var(--err)}
+canvas{width:100%;height:70px;display:block;border-radius:5px;background:#000}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{background:#222634;border:1px solid var(--line);color:var(--fg);
+       padding:8px 14px;border-radius:5px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#0b0c10;border-color:var(--acc);
+       font-weight:600}
+select{background:#0b0c10;border:1px solid var(--line);color:var(--fg);
+       padding:8px;border-radius:5px;font:inherit}
+pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
+    white-space:pre-wrap}
+.ex{color:var(--acc);cursor:pointer;text-decoration:underline dotted;
+    font-size:12px;margin-right:12px;display:inline-block;margin-top:4px}
+.meta{font-size:11px;color:var(--dim);margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PATTERN COMPILER</h1>
+  <div class="sub">Hosted on PC &rarr; Simulated audio via UDP &rarr; ESP32-S3 render</div>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label>ESP32 IP Address</label>
+        <input id="esp_ip" type="text" value="192.168.1.123" style="width:180px">
+      </div>
+      <div style="align-self: flex-end;">
+        <button id="save_ip">Update ESP32 Target</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label>expression</label>
+    <input id="expr" type="text" spellcheck="false"
+           value="0.5 + 0.5*sin(tau*x*2 + t) + bass*0.3">
+    <div id="status"></div>
+    <div>
+      <span class="ex">0.5+0.5*sin(tau*x*2+t)+bass*0.3</span>
+      <span class="ex">fract(x*4 - t*0.5)</span>
+      <span class="ex">tri(x*2+t*0.2)*0.7 + treb*0.3</span>
+      <span class="ex">sat(band(0)*3)*0.33 + x*0.1</span>
+      <span class="ex">fract(x + i*0.25 + t*0.1)</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label>preview &mdash; strip 0, simulated audio from PC streamer</label>
+    <canvas id="cv" width="600" height="70"></canvas>
+    <div class="meta" id="perf"></div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <label style="margin:0">slot</label>
+      <select id="slot"></select>
+      <input id="name" type="text" placeholder="name" style="width:160px">
+      <button class="primary" id="send">Upload &amp; activate</button>
+      <button id="refresh">Refresh Device</button>
+    </div>
+    <div class="meta" id="devstat">device: not polled</div>
+  </div>
+
+  <div class="panel">
+    <label>compiled bytecode</label>
+    <pre id="dis">—</pre>
+  </div>
+</div>
+
+<script src="compiler.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const NAMES = {0:'CONST',1:'X',2:'T',3:'IDX',4:'BAND',5:'LEVEL',6:'BASS',
+  7:'MID',8:'TREB',16:'ADD',17:'SUB',18:'MUL',19:'DIV',20:'MOD',21:'POW',
+  22:'MIN',23:'MAX',32:'NEG',33:'SIN',34:'COS',35:'ABS',36:'FLOOR',
+  37:'FRACT',38:'SQRT',39:'SAT',40:'TRI'};
+
+let code = null;
+
+for (let i = 0; i < 16; i++) {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = 'slot ' + i;
+  $('#slot').appendChild(o);
+}
+
+function disasm(c) {
+  let depth = 0;
+  return c.map((op, n) => {
+    const [o, a] = op;
+    const pops = o <= 8 ? 0 : (o >= 16 && o <= 23 ? 2 : 1);
+    depth = depth - pops + 1;
+    const arg = a !== undefined ? '  ' + (+a.toFixed(6)) : '';
+    return String(n).padStart(3, '0') + '  ' +
+           NAMES[o].padEnd(6) + arg.padEnd(12) + '; depth ' + depth;
+  }).join('\n');
+}
+
+function build() {
+  const src = $('#expr').value;
+  try {
+    code = compile(src);
+    $('#status').className = 'ok';
+    $('#status').textContent =
+      '\u2713 ' + code.length + ' ops, ' + (code.length * 8) + ' bytes';
+    $('#dis').textContent = disasm(code);
+  } catch (e) {
+    code = null;
+    $('#status').className = 'err';
+    $('#status').textContent = '\u2717 ' + e.message +
+      (e.pos !== undefined ? '  (col ' + (e.pos + 1) + ')' : '');
+    $('#dis').textContent = '—';
+  }
+}
+
+// Update ESP32 IP destination on the Node server
+$('#save_ip').onclick = async () => {
+  const ip = $('#esp_ip').value;
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ip })
+  });
+  alert('Server now streaming UDP to ' + ip);
+};
+
+// --- Preview using simulated audio synced from the PC server ---
+const cv = $('#cv'), cx = cv.getContext('2d');
+const N = 150, W = cv.width / N;
+let t0 = performance.now(), acc = 0, samples = 0;
+let liveAudio = { bands: [0,0,0,0,0,0,0,0], level: 0, bass: 0, mid: 0, treb: 0 };
+
+setInterval(async () => {
+  try {
+    const res = await fetch('/api/audio');
+    liveAudio = await res.json();
+  } catch (e) {}
+}, 50);
+
+function frame() {
+  const now = performance.now();
+  const t = (now - t0) / 1000;
+  cx.fillStyle = '#000'; 
+  cx.fillRect(0, 0, cv.width, cv.height);
+
+  if (code) {
+    const ctx = {
+      t,
+      i: 0,
+      bands: liveAudio.bands,
+      bass: liveAudio.bass,
+      mid: liveAudio.mid,
+      treb: liveAudio.treb,
+      level: liveAudio.level
+    };
+
+    const s = performance.now();
+    for (let p = 0; p < N; p++) {
+      ctx.x = p / (N - 1);
+      let v = evalCode(code, ctx);
+      v = v - Math.floor(v);
+      cx.fillStyle = 'hsl(' + (v * 360) + ',85%,55%)';
+      cx.fillRect(p * W, 0, W + 1, cv.height);
+    }
+    acc += performance.now() - s; 
+    samples++;
+    if (samples >= 60) {
+      $('#perf').textContent =
+        (acc / samples * 1000 / N).toFixed(2) + ' \u00b5s/pixel in this browser \u00b7 ' +
+        N + ' px/frame';
+      acc = 0; 
+      samples = 0;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// --- Send bytecode directly to ESP32 HTTP Server ---
+$('#send').onclick = async () => {
+  if (!code) { $('#status').textContent = '\u2717 fix the expression first'; return; }
+  const slot = +$('#slot').value;
+  const name = $('#name').value || 'untitled';
+  const espUrl = 'http://' + $('#esp_ip').value;
+
+  try {
+    const r = await fetch(espUrl + '/api/pattern', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toPayload(name, slot, code))
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    
+    await fetch(espUrl + '/api/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'slot=' + slot 
+    });
+
+    $('#status').className = 'ok';
+    $('#status').textContent =
+      '\u2713 slot ' + j.slot + ': ' + j.ops + ' ops, depth ' + j.depth;
+    poll();
+  } catch (e) {
+    $('#status').className = 'err';
+    $('#status').textContent = '\u2717 device: ' + e.message;
+  }
+};
+
+async function poll() {
+  const espUrl = 'http://' + $('#esp_ip').value;
+  try {
+    const j = await (await fetch(espUrl + '/api/slots')).json();
+    const used = j.slots.filter(s => s.used)
+                        .map(s => s.i + ':' + s.name).join('  ');
+    $('#devstat').textContent =
+      'active slot ' + j.active + ' \u00b7 ' + j.fps.toFixed(1) + ' fps \u00b7 ' +
+      j.evalUs + ' \u00b5s/frame in VM \u00b7 ' + (used || 'no slots stored');
+  } catch (e) {
+    $('#devstat').textContent = 'device: offline (preview still works)';
+  }
+}
+
+$('#refresh').onclick = poll;
+document.querySelectorAll('.ex').forEach(el => {
+  el.onclick = () => { $('#expr').value = el.textContent; build(); };
+});
+$('#expr').addEventListener('input', build);
+
+build();
+</script>
+</body>
+</html>
