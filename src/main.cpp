@@ -9,9 +9,9 @@
 
 #include <Arduino.h>
 // #include <WiFi.h>
-#include <LittleFS.h>
-#include <ESPAsyncWebServer.h>   // ESP32Async fork
-#include <ArduinoJson.h>
+// #include <LittleFS.h>
+// #include <ESPAsyncWebServer.h>   // ESP32Async fork
+// #include <ArduinoJson.h>
 #include <FastLED.h>
 
 #include "expr_vm.h"
@@ -50,7 +50,7 @@ static DRAM_ATTR CRGB leds3[NUM_LED3];
 
 static CRGB* const stripBuffers[NUM_STRIPS] = { leds0, leds1, leds2, leds3 };
 
-static AsyncWebServer server(80);
+// static AsyncWebServer server(80);
 
 // Audio features, written by the DSP task, read by the render task.
 // Single-writer / single-reader floats: a torn read costs at most one stale
@@ -116,135 +116,136 @@ static void renderTask(void *) {
 // ---------------------------------------------------------------- HTTP
 // POST /api/pattern
 // { "abi":1, "slot":3, "name":"wave", "code":[[0,0.5],[1],[18],...] }
-static void handlePatternBody(AsyncWebServerRequest *req, uint8_t *data,
-                              size_t len, size_t index, size_t total) {
-    static String buf;
-    if (index == 0) buf = "";
-    buf.concat((const char *)data, len);
-    if (index + len != total) return;
 
-    JsonDocument doc;
-    if (deserializeJson(doc, buf)) {
-        req->send(400, "application/json", "{\"error\":\"malformed JSON\"}");
-        return;
-    }
+// static void handlePatternBody(AsyncWebServerRequest *req, uint8_t *data,
+//                               size_t len, size_t index, size_t total) {
+//     static String buf;
+//     if (index == 0) buf = "";
+//     buf.concat((const char *)data, len);
+//     if (index + len != total) return;
 
-    if ((doc["abi"] | 0) != EXPR_ABI_VERSION) {
-        req->send(400, "application/json",
-                  "{\"error\":\"ABI mismatch - reload the page\"}");
-        return;
-    }
+//     JsonDocument doc;
+//     if (deserializeJson(doc, buf)) {
+//         req->send(400, "application/json", "{\"error\":\"malformed JSON\"}");
+//         return;
+//     }
 
-    const int slot = doc["slot"] | -1;
-    if (slot < 0 || slot >= EXPR_NUM_SLOTS) {
-        req->send(400, "application/json", "{\"error\":\"slot out of range\"}");
-        return;
-    }
+//     if ((doc["abi"] | 0) != EXPR_ABI_VERSION) {
+//         req->send(400, "application/json",
+//                   "{\"error\":\"ABI mismatch - reload the page\"}");
+//         return;
+//     }
 
-    JsonArray code = doc["code"];
-    if (code.isNull() || code.size() == 0 || code.size() > EXPR_MAX_OPS) {
-        req->send(400, "application/json", "{\"error\":\"bad code length\"}");
-        return;
-    }
+//     const int slot = doc["slot"] | -1;
+//     if (slot < 0 || slot >= EXPR_NUM_SLOTS) {
+//         req->send(400, "application/json", "{\"error\":\"slot out of range\"}");
+//         return;
+//     }
 
-    ExprProgram p{};
-    p.count = 0;
-    for (JsonArray op : code) {
-        if (op.size() < 1) {
-            req->send(400, "application/json", "{\"error\":\"bad op\"}");
-            return;
-        }
-        p.ops[p.count].op  = (uint8_t)(op[0] | 255);
-        p.ops[p.count].arg = op.size() > 1 ? (float)(op[1] | 0.0f) : 0.0f;
-        p.count++;
-    }
+//     JsonArray code = doc["code"];
+//     if (code.isNull() || code.size() == 0 || code.size() > EXPR_MAX_OPS) {
+//         req->send(400, "application/json", "{\"error\":\"bad code length\"}");
+//         return;
+//     }
 
-    // This is the only place trust is established. After this returns EXPR_OK
-    // the op array is known-safe forever, and the render loop never checks it
-    // again.
-    const char *name = doc["name"] | "untitled";
-    const ExprError e = store_save((uint8_t)slot, name, &p);
-    if (e != EXPR_OK) {
-        JsonDocument r;
-        r["error"] = expr_error_str(e);
-        String s; serializeJson(r, s);
-        req->send(400, "application/json", s);
-        return;
-    }
+//     ExprProgram p{};
+//     p.count = 0;
+//     for (JsonArray op : code) {
+//         if (op.size() < 1) {
+//             req->send(400, "application/json", "{\"error\":\"bad op\"}");
+//             return;
+//         }
+//         p.ops[p.count].op  = (uint8_t)(op[0] | 255);
+//         p.ops[p.count].arg = op.size() > 1 ? (float)(op[1] | 0.0f) : 0.0f;
+//         p.count++;
+//     }
 
-    JsonDocument r;
-    r["ok"] = true; r["slot"] = slot;
-    r["ops"] = p.count; r["depth"] = p.maxDepth;
-    String s; serializeJson(r, s);
-    req->send(200, "application/json", s);
-}
+//     // This is the only place trust is established. After this returns EXPR_OK
+//     // the op array is known-safe forever, and the render loop never checks it
+//     // again.
+//     const char *name = doc["name"] | "untitled";
+//     const ExprError e = store_save((uint8_t)slot, name, &p);
+//     if (e != EXPR_OK) {
+//         JsonDocument r;
+//         r["error"] = expr_error_str(e);
+//         String s; serializeJson(r, s);
+//         req->send(400, "application/json", s);
+//         return;
+//     }
 
-static void setupRoutes() {
+//     JsonDocument r;
+//     r["ok"] = true; r["slot"] = slot;
+//     r["ops"] = p.count; r["depth"] = p.maxDepth;
+//     String s; serializeJson(r, s);
+//     req->send(200, "application/json", s);
+// }
+
+// static void setupRoutes() {
     
-    // 1. Allow cross-origin requests from any local frontend host
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
+//     // 1. Allow cross-origin requests from any local frontend host
+//     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+//     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+//     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
 
-    // 2. Respond to browser preflight OPTIONS requests
-    server.onNotFound([](AsyncWebServerRequest *request) {
-        if (request->method() == HTTP_OPTIONS) {
-            request->send(200);
-        } else {
-            request->send(404);
-        }
-    });
+//     // 2. Respond to browser preflight OPTIONS requests
+//     server.onNotFound([](AsyncWebServerRequest *request) {
+//         if (request->method() == HTTP_OPTIONS) {
+//             request->send(200);
+//         } else {
+//             request->send(404);
+//         }
+//     });
 
-    server.on("/api/pattern", HTTP_POST,
-              [](AsyncWebServerRequest *r) {}, nullptr, handlePatternBody);
+//     server.on("/api/pattern", HTTP_POST,
+//               [](AsyncWebServerRequest *r) {}, nullptr, handlePatternBody);
 
-    server.on("/api/select", HTTP_POST, [](AsyncWebServerRequest *r) {
-        if (!r->hasParam("slot", true)) { r->send(400); return; }
-        const int slot = r->getParam("slot", true)->value().toInt();
-        const ExprError e = store_activate((uint8_t)slot);
-        if (e != EXPR_OK) {
-            r->send(400, "application/json",
-                    String("{\"error\":\"") + expr_error_str(e) + "\"}");
-            return;
-        }
-        r->send(200, "application/json", "{\"ok\":true}");
-    });
+//     server.on("/api/select", HTTP_POST, [](AsyncWebServerRequest *r) {
+//         if (!r->hasParam("slot", true)) { r->send(400); return; }
+//         const int slot = r->getParam("slot", true)->value().toInt();
+//         const ExprError e = store_activate((uint8_t)slot);
+//         if (e != EXPR_OK) {
+//             r->send(400, "application/json",
+//                     String("{\"error\":\"") + expr_error_str(e) + "\"}");
+//             return;
+//         }
+//         r->send(200, "application/json", "{\"ok\":true}");
+//     });
 
-    server.on("/api/slots", HTTP_GET, [](AsyncWebServerRequest *r) {
-        JsonDocument d;
-        d["active"] = store_activeSlot();
-        d["fps"] = g_fps;
-        d["evalUs"] = g_evalUs;
+//     server.on("/api/slots", HTTP_GET, [](AsyncWebServerRequest *r) {
+//         JsonDocument d;
+//         d["active"] = store_activeSlot();
+//         d["fps"] = g_fps;
+//         d["evalUs"] = g_evalUs;
 
-        // Provide strip dimensions to the web preview canvas
-        JsonArray stripLens = d["stripLengths"].to<JsonArray>();
-        for (int i = 0; i < NUM_STRIPS; i++) {
-            stripLens.add(STRIP_LENGTHS[i]);
-        }
+//         // Provide strip dimensions to the web preview canvas
+//         JsonArray stripLens = d["stripLengths"].to<JsonArray>();
+//         for (int i = 0; i < NUM_STRIPS; i++) {
+//             stripLens.add(STRIP_LENGTHS[i]);
+//         }
 
-        JsonArray a = d["slots"].to<JsonArray>();
-        for (uint8_t i = 0; i < EXPR_NUM_SLOTS; i++) {
-            SlotMeta m; store_meta(i, &m);
-            JsonObject o = a.add<JsonObject>();
-            o["i"] = i; o["used"] = m.used;
-            o["name"] = m.name; o["ops"] = m.opCount;
-        }
-        String s; serializeJson(d, s);
-        r->send(200, "application/json", s);
-    });
+//         JsonArray a = d["slots"].to<JsonArray>();
+//         for (uint8_t i = 0; i < EXPR_NUM_SLOTS; i++) {
+//             SlotMeta m; store_meta(i, &m);
+//             JsonObject o = a.add<JsonObject>();
+//             o["i"] = i; o["used"] = m.used;
+//             o["name"] = m.name; o["ops"] = m.opCount;
+//         }
+//         String s; serializeJson(d, s);
+//         r->send(200, "application/json", s);
+//     });
 
-    server.on("/api/audio", HTTP_GET, [](AsyncWebServerRequest *r) {
-        JsonDocument d;
-        JsonArray a = d["bands"].to<JsonArray>();
-        for (int i = 0; i < 8; i++) a.add(g_bands[i]);
-        d["level"] = g_level; d["bass"] = g_bass;
-        d["mid"] = g_mid; d["treb"] = g_treb;
-        String s; serializeJson(d, s);
-        r->send(200, "application/json", s);
-    });
+//     server.on("/api/audio", HTTP_GET, [](AsyncWebServerRequest *r) {
+//         JsonDocument d;
+//         JsonArray a = d["bands"].to<JsonArray>();
+//         for (int i = 0; i < 8; i++) a.add(g_bands[i]);
+//         d["level"] = g_level; d["bass"] = g_bass;
+//         d["mid"] = g_mid; d["treb"] = g_treb;
+//         String s; serializeJson(d, s);
+//         r->send(200, "application/json", s);
+//     });
 
-    server.serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html");
-}
+//     server.serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html");
+// }
 
 // ---------------------------------------------------------------- setup
 void setup() {
@@ -284,7 +285,6 @@ void setup() {
     FastLED.clear(true);
 
     delay(10);
-    Serial.println("Checkpoint 1");
     xTaskCreatePinnedToCore(renderTask, "render", 8192, nullptr, 3, nullptr, 1);
 }
 
