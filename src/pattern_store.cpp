@@ -78,14 +78,18 @@ static void scanSlots() {
 }
 
 bool store_begin() {
+    loadDefault(&g_buf[0]);            // always have a safe program
+    g_activeBuf = 0; g_activeSlot = 0;
+
     if (!LittleFS.begin(true)) return false;
     if (!LittleFS.exists("/pat")) LittleFS.mkdir("/pat");
     scanSlots();
 
-    if (!g_meta[0].used) loadDefault(&g_buf[0]);
-    else                 readSlot(0, &g_buf[0], nullptr);
-    g_activeBuf = 0;
-    g_activeSlot = 0;
+    if (g_meta[0].used) {
+        ExprProgram tmp;
+        if (readSlot(0, &tmp, nullptr)) g_buf[0] = tmp;
+    }
+    
     return true;
 }
 

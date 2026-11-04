@@ -8,7 +8,7 @@
 // correlates with network traffic.
 
 #include <Arduino.h>
-#include <WiFi.h>
+// #include <WiFi.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>   // ESP32Async fork
 #include <ArduinoJson.h>
@@ -74,7 +74,7 @@ static void renderTask(void *) {
         // Latch the active program once per frame
         const ExprProgram *prog = store_current();
 
-        ExprCtx c;
+        ExprCtx c {};
         c.t = (float)(millis() % 3600000UL) / 1000.0f;
         for (int b = 0; b < 8; b++) bandsSnapshot[b] = g_bands[b];
         c.bands = bandsSnapshot;
@@ -89,6 +89,7 @@ static void renderTask(void *) {
             const float invN = (count > 1) ? (1.0f / (float)(count - 1)) : 0.0f;
 
             for (uint16_t i = 0; i < count; i++) {
+
                 c.x = (float)i * invN;
                 const float v = expr_eval(prog, &c);
 
@@ -101,14 +102,6 @@ static void renderTask(void *) {
 
         FastLED.show();
 
-        fill_solid(leds0, 180, CRGB::Red);
-        fill_solid(leds1, 100, CRGB::Red);
-        fill_solid(leds2, 180, CRGB::Red);
-        fill_solid(leds3, 101, CRGB::Red);
-        
-        FastLED.show();
-        delay(1000); // Wait 1 second
-
         if (++frameCount >= 30) {
             const uint32_t now = millis();
             g_fps = 30000.0f / (float)(now - lastFpsMs);
@@ -119,6 +112,7 @@ static void renderTask(void *) {
         vTaskDelay(1);   // Yield; FastLED.show() already paces us
     }
 }
+
 // ---------------------------------------------------------------- HTTP
 // POST /api/pattern
 // { "abi":1, "slot":3, "name":"wave", "code":[[0,0.5],[1],[18],...] }
@@ -186,6 +180,21 @@ static void handlePatternBody(AsyncWebServerRequest *req, uint8_t *data,
 }
 
 static void setupRoutes() {
+    
+    // 1. Allow cross-origin requests from any local frontend host
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // 2. Respond to browser preflight OPTIONS requests
+    server.onNotFound([](AsyncWebServerRequest *request) {
+        if (request->method() == HTTP_OPTIONS) {
+            request->send(200);
+        } else {
+            request->send(404);
+        }
+    });
+
     server.on("/api/pattern", HTTP_POST,
               [](AsyncWebServerRequest *r) {}, nullptr, handlePatternBody);
 
@@ -240,9 +249,31 @@ static void setupRoutes() {
 // ---------------------------------------------------------------- setup
 void setup() {
     Serial.begin(115200);
+
+    // -------------------------------------------------------------
+    // Diagnostic Mock Audio Data (Simulated Bass-Heavy Beat)
+    // -------------------------------------------------------------
+    // g_bands: 8 frequency buckets (sub-bass -> treble)
+    g_bands[0] = 0.85f; // Sub-bass (kick)
+    g_bands[1] = 0.70f; // Bass
+    g_bands[2] = 0.55f; // Low mid
+    g_bands[3] = 0.40f; // Mid
+    g_bands[4] = 0.35f; // High mid
+    g_bands[5] = 0.30f; // Presence
+    g_bands[6] = 0.25f; // Brilliance
+    g_bands[7] = 0.20f; // Air / Top end
+
+    // High-level aggregate metrics used by expression formulas
+    g_level = 0.65f; // Overall volume / energy
+    g_bass  = 0.85f; // Bass response (mapped to kick/beat)
+    g_mid   = 0.45f; // Midrange response
+    g_treb  = 0.25f; // Treble response
+
     expr_init();
 
-    if (!store_begin()) Serial.println("LittleFS mount failed");
+    if (!store_begin()) {
+        Serial.println("Store begin failed!");
+    }
 
     FastLED.addLeds<WS2812B, PIN_LED0, GRB>(leds0, NUM_LED0);
     FastLED.addLeds<WS2812B, PIN_LED1, GRB>(leds1, NUM_LED1);
@@ -252,19 +283,12 @@ void setup() {
     FastLED.setBrightness(160);
     FastLED.clear(true);
 
-    WiFi.mode(WIFI_STA);
-    WiFi.begin("BLITE4750", "z2zt3H2J47xF");
-    while (WiFi.status() != WL_CONNECTED) { delay(250); Serial.print('.'); }
-    Serial.println(WiFi.localIP());
-
-    setupRoutes();
-    server.begin();
-
-    // Both real-time tasks on core 1; core 0 is left to Wi-Fi.
+    delay(10);
+    Serial.println("Checkpoint 1");
     xTaskCreatePinnedToCore(renderTask, "render", 8192, nullptr, 3, nullptr, 1);
-    // xTaskCreatePinnedToCore(audioTask, "audio", 8192, nullptr, 4, nullptr, 1);
 }
 
 void loop() { 
     vTaskDelay(portMAX_DELAY); 
 }
+
