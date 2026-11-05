@@ -8,7 +8,7 @@ const path = require('path');
 const dgram = require('dgram');
 
 // --- Configuration ---
-let ESP32_IP = '192.168.1.123'; // Replace with your ESP32's IP or update via the UI
+let ESP32_IP = '192.168.1.83'; // Replace with your ESP32's IP or update via the UI
 const UDP_PORT = 49152;
 const HTTP_PORT = 3000;
 
