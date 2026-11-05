@@ -11,10 +11,11 @@
 
 #include "expr_vm.h"
 #include "pattern_store.h"
+#include "secrets.h"
 
 // ---------------------------------------------------------------- Network Config
-const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* ssid     = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 const uint16_t UDP_PORT   = 49152; // Port to receive audio packets from PC
 
 // Binary payload layout matching the PC sender (packed to prevent padding mismatches)
@@ -70,7 +71,7 @@ static volatile uint32_t g_evalUs = 0;
 static void networkTask(void *) {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false); // Crucial: disables modem power-saving to keep packet latency sub-millisecond
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(ssid, password);
 
     Serial.print("Connecting to Wi-Fi");
     while (WiFi.status() != WL_CONNECTED) {
