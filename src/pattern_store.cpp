@@ -1,6 +1,7 @@
 #include "pattern_store.h"
 #include <LittleFS.h>
 #include <string.h>
+#include <atomic>
 
 // On-flash slot format. Fixed-size, so a slot write is one truncate + one
 // write with no allocation.

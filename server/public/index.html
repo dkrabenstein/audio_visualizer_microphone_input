@@ -46,13 +46,14 @@ pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
   <div class="panel">
     <div class="row">
       <div>
-        <label>ESP32 IP Address</label>
-        <input id="esp_ip" type="text" value="192.168.1.83" style="width:180px">
+        <label>ESP32 hostname or IP</label>
+        <input id="esp_ip" type="text" value="visualizer.local" style="width:180px">
       </div>
       <div style="align-self: flex-end;">
         <button id="save_ip">Update ESP32 Target</button>
       </div>
     </div>
+    <div class="meta" id="target">&mdash;</div>
   </div>
 
   <div class="panel">
@@ -137,16 +138,46 @@ function build() {
   }
 }
 
-// Update ESP32 IP destination on the Node server
+// The Node server resolves the hostname (mDNS) and reports the IP. Device
+// requests use that IP, so the browser doesn't repeat the mDNS lookup.
+let espIp = null;
+const espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
+
+function showTarget(j) {
+  espIp = j.ip;
+  $('#target').textContent = j.ip
+    ? j.host + ' → ' + j.ip
+    : j.host + ' → not found' + (j.error ? ' (' + j.error + ')' : '');
+}
+
+// Point the Node server's UDP stream at a new host or IP
 $('#save_ip').onclick = async () => {
-  const ip = $('#esp_ip').value;
-  await fetch('/api/config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ip })
-  });
-  alert('Server now streaming UDP to ' + ip);
+  const host = $('#esp_ip').value.trim();
+  $('#target').textContent = 'resolving ' + host + '…';
+  try {
+    const j = await (await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host })
+    })).json();
+    showTarget(j);
+  } catch (e) {
+    $('#target').textContent = 'dev server unreachable';
+  }
+  poll();
 };
+
+// Start with whatever the Node server is currently streaming to. Its first
+// lookup may still be running, so retry briefly until an IP comes back.
+(async function loadTarget(tries) {
+  try {
+    const j = await (await fetch('/api/config')).json();
+    $('#esp_ip').value = j.host;
+    showTarget(j);
+    if (!j.ip && tries > 0) return setTimeout(() => loadTarget(tries - 1), 1000);
+  } catch (e) {}
+  poll();
+})(5);
 
 // --- Preview using simulated audio synced from the PC server ---
 const cv = $('#cv'), cx = cv.getContext('2d');
@@ -205,10 +236,9 @@ $('#send').onclick = async () => {
   if (!code) { $('#status').textContent = '\u2717 fix the expression first'; return; }
   const slot = +$('#slot').value;
   const name = $('#name').value || 'untitled';
-  const espUrl = 'http://' + $('#esp_ip').value;
 
   try {
-    const r = await fetch(espUrl + '/api/pattern', {
+    const r = await fetch(espUrl() + '/api/pattern', {
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toPayload(name, slot, code))
@@ -216,7 +246,7 @@ $('#send').onclick = async () => {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     
-    await fetch(espUrl + '/api/select', {
+    await fetch(espUrl() + '/api/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'slot=' + slot 
@@ -233,9 +263,8 @@ $('#send').onclick = async () => {
 };
 
 async function poll() {
-  const espUrl = 'http://' + $('#esp_ip').value;
   try {
-    const j = await (await fetch(espUrl + '/api/slots')).json();
+    const j = await (await fetch(espUrl() + '/api/slots')).json();
     const used = j.slots.filter(s => s.used)
                         .map(s => s.i + ':' + s.name).join('  ');
     $('#devstat').textContent =
