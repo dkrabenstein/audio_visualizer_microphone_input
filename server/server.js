@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const dgram = require('dgram');
 const dns = require('dns');
+const net = require('net');
 
 // --- Configuration ---
 // ESP32 address: its mDNS name by default, or `node server.js <host-or-ip>`,
@@ -25,11 +26,15 @@ let resolving = false;
 
 function resolveHost() {
   if (resolving) return;
+  if (beaconFresh() && !net.isIP(ESP32_HOST)) return; // beacon is authoritative
   resolving = true;
   const host = ESP32_HOST;
   dns.lookup(host, { family: 4 }, (err, address) => {
     resolving = false;
     if (host !== ESP32_HOST) return resolveHost(); // host changed mid-lookup
+    // A beacon arrived while this lookup was in flight; it is fresher than the
+    // answer (or failure) of the lookup, so don't let mDNS overwrite it.
+    if (beaconFresh() && !net.isIP(host)) return;
     if (err) {
       if (ESP32_IP !== null) console.log(`Lost ${host}: ${err.code}`);
       else console.log(`Cannot resolve ${host} (${err.code}), retrying...`);
@@ -44,7 +49,34 @@ function resolveHost() {
 function setHost(host) {
   ESP32_HOST = host;
   ESP32_IP = null;
+  lastBeaconAt = 0; // a newly chosen target must be re-resolved, not beacon-trusted
   resolveHost();
+}
+
+// --- Beacon listener ---
+// The ESP32 broadcasts "VIZ1" every 2 s and on every (re)connect. The packet's
+// source address is the board's current IP, so a DHCP change is picked up in
+// seconds with no mDNS. mDNS stays as the fallback (e.g. a firewall blocking
+// inbound UDP, or no beacon heard). A manually entered raw IP is never overridden.
+const BEACON_PORT = 49153;
+const BEACON_FRESH_MS = 8000;
+let lastBeaconAt = 0;
+
+const beaconSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+beaconSocket.on('message', (msg, rinfo) => {
+  if (msg.toString() !== 'VIZ1') return;
+  if (net.isIP(ESP32_HOST)) return; // user pinned an explicit IP
+  lastBeaconAt = Date.now();
+  if (rinfo.address !== ESP32_IP) {
+    console.log(`Beacon: ESP32 is at ${rinfo.address}`);
+    ESP32_IP = rinfo.address;
+  }
+});
+beaconSocket.on('error', (e) => console.log(`Beacon listener unavailable (${e.code}); using mDNS only`));
+beaconSocket.bind(BEACON_PORT);
+
+function beaconFresh() {
+  return Date.now() - lastBeaconAt < BEACON_FRESH_MS;
 }
 
 resolveHost();

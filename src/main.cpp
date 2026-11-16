@@ -67,7 +67,12 @@ const uint16_t UDP_PORT = 49152;
 // Advertised over mDNS, so the board is reachable as http://visualizer.local
 // whatever IP DHCP hands out.
 const char* MDNS_HOSTNAME = "visualizer";
+// Presence beacon: the board broadcasts a tiny packet so the PC server learns
+// the current IP within seconds of any DHCP change, without relying on mDNS.
+const uint16_t BEACON_PORT = 49153;
+const uint32_t BEACON_INTERVAL_MS = 2000;
 static WiFiUDP udp;
+static WiFiUDP beaconUdp;
 static AsyncWebServer server(80);
 
 // Binary payload layout matching the PC UDP sender
@@ -253,6 +258,24 @@ static void setupHttpRoutes() {
 }
 
 // ---------------------------------------------------------------- Core 0 Task (Network)
+static void startMdns() {
+    MDNS.end();  // restart cleanly: re-adding a service to a running responder fails
+    if (MDNS.begin(MDNS_HOSTNAME)) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.printf("mDNS: http://%s.local\n", MDNS_HOSTNAME);
+    } else {
+        Serial.println("mDNS failed to start (use the IP above)");
+    }
+}
+
+// Broadcast "VIZ1" on the subnet; the receiver reads our IP from the packet's
+// source address, so the payload carries no data.
+static void sendBeacon() {
+    beaconUdp.beginPacket(WiFi.broadcastIP(), BEACON_PORT);
+    beaconUdp.write((const uint8_t*)"VIZ1", 4);
+    beaconUdp.endPacket();
+}
+
 static void networkTask(void *) {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
@@ -265,12 +288,7 @@ static void networkTask(void *) {
     }
     Serial.printf("\nConnected! ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
 
-    if (MDNS.begin(MDNS_HOSTNAME)) {
-        MDNS.addService("http", "tcp", 80);
-        Serial.printf("mDNS: http://%s.local\n", MDNS_HOSTNAME);
-    } else {
-        Serial.println("mDNS failed to start (use the IP above)");
-    }
+    startMdns();
 
     setupHttpRoutes();
     Serial.println("AsyncWebServer running on port 80");
@@ -279,8 +297,28 @@ static void networkTask(void *) {
     Serial.printf("UDP audio receiver listening on port %u\n", UDP_PORT);
 
     AudioPayload packet;
+    bool wasConnected = true;
+    uint32_t lastBeaconMs = 0;
 
     for (;;) {
+        // Connection watchdog: AutoReconnect rejoins Wi-Fi, but the DHCP lease
+        // may differ, so re-announce mDNS and beacon as soon as we're back.
+        const bool connected = (WiFi.status() == WL_CONNECTED);
+        if (connected && !wasConnected) {
+            Serial.printf("Wi-Fi back. ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
+            startMdns();
+            udp.begin(UDP_PORT);
+            lastBeaconMs = 0;  // force an immediate beacon
+        } else if (!connected && wasConnected) {
+            Serial.println("Wi-Fi lost, waiting for auto-reconnect...");
+        }
+        wasConnected = connected;
+
+        if (connected && (millis() - lastBeaconMs >= BEACON_INTERVAL_MS || lastBeaconMs == 0)) {
+            lastBeaconMs = millis();
+            sendBeacon();
+        }
+
         int packetSize = udp.parsePacket();
         if (packetSize >= (int)sizeof(AudioPayload)) {
             udp.read((char*)&packet, sizeof(AudioPayload));
