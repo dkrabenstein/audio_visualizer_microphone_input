@@ -14,7 +14,17 @@
 #include <FastLED.h>
 
 #include "secrets.h"
+#include "pins.h"
 #include "expr_vm.h"
+#include "audio_source.h"
+
+// Audio source: on-board I2S mic by default. Build with -DAUDIO_USE_UDP to take
+// features from the PC's UDP stream instead (handy for testing without a mic).
+#ifdef AUDIO_USE_UDP
+static const AudioSourceKind AUDIO_SOURCE = AUDIO_SRC_UDP;
+#else
+static const AudioSourceKind AUDIO_SOURCE = AUDIO_SRC_MIC;
+#endif
 
 // ---------------------------------------------------------------- RAM Pattern Storage
 #define NUM_SLOTS 16
@@ -99,11 +109,6 @@ static const uint16_t STRIP_LENGTHS[NUM_STRIPS] = {
     NUM_LED3
 };
 
-#define PIN_LED0 4
-#define PIN_LED1 5
-#define PIN_LED2 6
-#define PIN_LED3 7
-
 #define MAX_MILLIAMPS 6000
 
 static DRAM_ATTR CRGB leds0[NUM_LED0];
@@ -112,10 +117,6 @@ static DRAM_ATTR CRGB leds2[NUM_LED2];
 static DRAM_ATTR CRGB leds3[NUM_LED3];
 
 static CRGB* const stripBuffers[NUM_STRIPS] = { leds0, leds1, leds2, leds3 };
-
-// Shared audio metrics written by Core 0 (UDP), read by Core 1 (render)
-static volatile float g_bands[8] = {0};
-static volatile float g_level = 0, g_bass = 0, g_mid = 0, g_treb = 0;
 
 static volatile uint32_t g_frames = 0;
 static volatile float    g_fps = 0;
@@ -233,7 +234,10 @@ static void setupHttpRoutes() {
         d["active"] = ram_store_activeSlot();
         d["fps"] = g_fps;
         d["evalUs"] = g_evalUs;
-        d["level"] = g_level;   // last received audio level; 0 = no UDP arriving
+        AudioFeatures af;
+        audio_source_get(&af);
+        d["level"] = af.level;  // latest audio level; 0 = silence / no input
+        d["source"] = audio_source_kind() == AUDIO_SRC_MIC ? "mic" : "udp";
 
         JsonArray stripLens = d["stripLengths"].to<JsonArray>();
         for (int i = 0; i < NUM_STRIPS; i++) {
@@ -323,13 +327,13 @@ static void networkTask(void *) {
         if (packetSize >= (int)sizeof(AudioPayload)) {
             udp.read((char*)&packet, sizeof(AudioPayload));
 
-            for (int i = 0; i < 8; i++) {
-                g_bands[i] = packet.bands[i];
-            }
-            g_level = packet.level;
-            g_bass  = packet.bass;
-            g_mid   = packet.mid;
-            g_treb  = packet.treb;
+            AudioFeatures f;
+            for (int i = 0; i < 8; i++) f.bands[i] = packet.bands[i];
+            f.level = packet.level;
+            f.bass  = packet.bass;
+            f.mid   = packet.mid;
+            f.treb  = packet.treb;
+            audio_source_push_udp(f);  // ignored while the mic is the active source
         }
         vTaskDelay(1);
     }
@@ -351,12 +355,14 @@ static void renderTask(void *) {
 
         ExprCtx c {};
         c.t = (float)(millis() % 3600000UL) / 1000.0f;
-        for (int b = 0; b < 8; b++) bandsSnapshot[b] = g_bands[b];
+        AudioFeatures af;
+        audio_source_get(&af);
+        for (int b = 0; b < 8; b++) bandsSnapshot[b] = af.bands[b];
         c.bands = bandsSnapshot;
-        c.level = g_level; 
-        c.bass = g_bass; 
-        c.mid = g_mid; 
-        c.treb = g_treb;
+        c.level = af.level;
+        c.bass  = af.bass;
+        c.mid   = af.mid;
+        c.treb  = af.treb;
 
         for (int s = 0; s < NUM_STRIPS; s++) {
             c.idx = (float)s;
@@ -395,16 +401,31 @@ void setup() {
 
     expr_init();
 
-    // Populate slot 0 with a default fallback pattern (solid rainbow wash) in RAM
+    if (!audio_source_begin(AUDIO_SOURCE)) {
+        Serial.println("Audio source failed to start (check I2S pins / mic)");
+    }
+
+    // Slot 0: audio-reactive default, in RAM. The renderer maps the result to hue, so
+    //   hue = 0.3*x + 0.03*t + bass + 1.5*level
+    // i.e. a slowly drifting rainbow along each strip whose colours swing with the
+    // music (bass shifts the hue, overall loudness shifts it further).
     ExprProgram defProg{};
-    defProg.count = 5;
-    defProg.ops[0] = { OP_X, 0.0f };
-    defProg.ops[1] = { OP_T, 0.0f };
-    defProg.ops[2] = { OP_CONST, 0.1f };
-    defProg.ops[3] = { OP_MUL, 0.0f };
-    defProg.ops[4] = { OP_ADD, 0.0f };
+    defProg.count = 13;
+    defProg.ops[0]  = { OP_X, 0.0f };
+    defProg.ops[1]  = { OP_CONST, 0.3f };
+    defProg.ops[2]  = { OP_MUL, 0.0f };
+    defProg.ops[3]  = { OP_T, 0.0f };
+    defProg.ops[4]  = { OP_CONST, 0.03f };
+    defProg.ops[5]  = { OP_MUL, 0.0f };
+    defProg.ops[6]  = { OP_ADD, 0.0f };
+    defProg.ops[7]  = { OP_BASS, 0.0f };
+    defProg.ops[8]  = { OP_ADD, 0.0f };
+    defProg.ops[9]  = { OP_LEVEL, 0.0f };
+    defProg.ops[10] = { OP_CONST, 1.5f };
+    defProg.ops[11] = { OP_MUL, 0.0f };
+    defProg.ops[12] = { OP_ADD, 0.0f };
     expr_validate(&defProg);
-    ram_store_save(0, "default_rainbow", &defProg);
+    ram_store_save(0, "audio_reactive", &defProg);
 
     FastLED.addLeds<WS2812B, PIN_LED0, GRB>(leds0, NUM_LED0);
     FastLED.addLeds<WS2812B, PIN_LED1, GRB>(leds1, NUM_LED1);
