@@ -36,6 +36,10 @@ pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
 .ex{color:var(--acc);cursor:pointer;text-decoration:underline dotted;
     font-size:12px;margin-right:12px;display:inline-block;margin-top:4px}
 .meta{font-size:11px;color:var(--dim);margin-top:8px}
+#slots{margin-top:12px}
+#slots button{padding:6px 10px;font-size:12px}
+#slots button.active{background:var(--acc);color:#0b0c10;border-color:var(--acc);font-weight:600}
+#slots button:disabled{opacity:.35;cursor:default}
 </style>
 </head>
 <body>
@@ -48,13 +52,7 @@ pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
     <input id="expr" type="text" spellcheck="false"
            value="0.5 + 0.5*sin(tau*x*2 + t) + bass*0.3">
     <div id="status"></div>
-    <div>
-      <span class="ex">0.5+0.5*sin(tau*x*2+t)+bass*0.3</span>
-      <span class="ex">fract(x*4 - t*0.5)</span>
-      <span class="ex">tri(x*2+t*0.2)*0.7 + treb*0.3</span>
-      <span class="ex">sat(band(0)*3)*0.33 + x*0.1</span>
-      <span class="ex">fract(x + i*0.25 + t*0.1)</span>
-    </div>
+    <div id="examples"></div>
   </div>
 
   <div class="panel">
@@ -72,6 +70,8 @@ pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
       <button id="refresh">Refresh</button>
     </div>
     <div class="meta" id="devstat">device: not polled</div>
+    <label style="margin-top:12px">stored slots &mdash; click to switch, no upload needed</label>
+    <div class="row" id="slots"></div>
   </div>
 
   <div class="panel">
@@ -81,6 +81,7 @@ pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
 </div>
 
 <script src="compiler.js"></script>
+<script src="presets.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const NAMES = {0:'CONST',1:'X',2:'T',3:'IDX',4:'BAND',5:'LEVEL',6:'BASS',
@@ -200,17 +201,81 @@ async function poll() {
     $('#devstat').textContent =
       'active slot ' + j.active + ' \u00b7 ' + j.fps.toFixed(1) + ' fps \u00b7 ' +
       j.evalUs + ' \u00b5s/frame in VM \u00b7 ' + (used || 'no slots stored');
+    renderSlots(j);
   } catch (e) {
     $('#devstat').textContent = 'device: offline (preview still works)';
   }
 }
+
+// One button per slot. Empty slots are disabled because the firmware
+// rejects /api/select for a slot that was never uploaded.
+function renderSlots(j) {
+  const box = $('#slots');
+  box.textContent = '';
+  j.slots.forEach(s => {
+    const b = document.createElement('button');
+    b.textContent = s.i + (s.used ? ': ' + s.name : '');
+    b.disabled = !s.used;
+    if (s.i === j.active) b.className = 'active';
+    b.onclick = () => selectSlot(s.i);
+    box.appendChild(b);
+  });
+}
+
+async function selectSlot(i) {
+  try {
+    const r = await fetch('/api/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'slot=' + i });
+    if (!r.ok) throw new Error((await r.json()).error || r.status);
+    $('#status').className = 'ok';
+    $('#status').textContent = '\u2713 switched to slot ' + i;
+  } catch (e) {
+    $('#status').className = 'err';
+    $('#status').textContent = '\u2717 device: ' + e.message;
+  }
+  poll();
+}
 $('#refresh').onclick = poll;
 
-document.querySelectorAll('.ex').forEach(el => {
-  el.onclick = () => { $('#expr').value = el.textContent; build(); };
+// Preset links: load an expression into the editor (does not upload it).
+PRESETS.forEach((p, n) => {
+  const el = document.createElement('span');
+  el.className = 'ex';
+  el.textContent = (PRESET_FIRST_SLOT + n) + ': ' + p.name;
+  el.title = p.expr;
+  el.onclick = () => {
+    $('#expr').value = p.expr; $('#name').value = p.name;
+    $('#slot').value = PRESET_FIRST_SLOT + n; build();
+  };
+  $('#examples').appendChild(el);
 });
+
+// Upload every preset to slots 1..5. Only /api/pattern is called, never
+// /api/select, so the running pattern is not interrupted.
+async function uploadPresets() {
+  try {
+    for (let n = 0; n < PRESETS.length; n++) {
+      const p = PRESETS[n], slot = PRESET_FIRST_SLOT + n;
+      const r = await fetch('/api/pattern', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toPayload(p.name, slot, compile(p.expr)))
+      });
+      if (!r.ok) throw new Error(p.name + ': ' + ((await r.json()).error || r.status));
+    }
+    $('#status').className = 'ok';
+    $('#status').textContent = '✓ presets loaded into slots ' + PRESET_FIRST_SLOT +
+      '-' + (PRESET_FIRST_SLOT + PRESETS.length - 1);
+  } catch (e) {
+    $('#status').className = 'err';
+    $('#status').textContent = '✗ preset upload: ' + e.message;
+  }
+  poll();
+}
+
 $('#expr').addEventListener('input', build);
-build(); poll();
+build(); uploadPresets();
 </script>
 </body>
 </html>
