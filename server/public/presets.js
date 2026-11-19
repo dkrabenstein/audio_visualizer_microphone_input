@@ -1,5 +1,8 @@
-// presets.js -- the five built-in microphone patterns, uploaded to slots 1-5
-// whenever the page loads (slot 0 is the firmware's own default).
+// presets.js -- the built-in microphone patterns, uploaded to slots 1-6
+// whenever the page loads (slot 0 is the firmware's own default:
+// 0.3*x + 0.03*t + bass + 1.5*level).
+//
+// These are the tested equations from README.md.
 //
 // The firmware turns each expression's result into a HUE only (fract(v) ->
 // CHSV hue, fixed saturation and brightness), so every pattern here is a
@@ -12,45 +15,40 @@
 
 const PRESETS = [
   {
-    // Classic level meter along each strip. The bar grows from x=0 with
-    // loudness; inside the bar the colour runs green -> red toward the tip,
-    // outside it is blue. sat(...*40) turns "x < level" into a sharp edge.
-    name: 'vu_meter',
-    expr: '0.66 + sat((sat(level*3) - x)*40) * (-0.33 - 0.33*x)'
+    // Spectral centroid: bass-heavy sound is red, treble-heavy sound moves
+    // around the wheel. One colour for the whole strip.
+    name: 'dominant_frequency',
+    expr: '7 * (0.07*bass + 0.43*mid + 0.86*treb) / (bass + mid + treb)'
   },
   {
-    // Position along the strip = frequency (bass at x=0, treble at x=1).
-    // Four bands are blended with triangular weights, and each spot's colour
-    // goes blue -> red as its frequency gets louder: a colour equaliser.
+    // Rainbow along the strip, with each region's colour shifted by the
+    // matching part of the spectrum (bass at x=0, treble at x=1, squared so
+    // the bass gets more of the strip).
+    name: 'spectrum_hue_shift',
+    expr: '0.745*x + 3*(bass*sat(1-2*x^2) + mid*sat(1-abs(2*x^2-1)) + treb*sat(2*x^2-1))'
+  },
+  {
+    // Level line: a bar that grows from x=0 with bass. Inside the bar the
+    // colour sweeps along x; outside it stays red.
+    name: 'level_line',
+    expr: '1 + sat((sat(sqrt(level*bass ^ 3)*2) - x)*160) * (-0.33 - .33*x - .2*bass)'
+  },
+  {
+    // Level line, second colour scheme.
+    name: 'level_line_2',
+    expr: '.99 + 1.1 * sat((sat(sqrt(level*bass ^ 3)*2) - x)*160) * (-.24 - .2*x - .2*bass)'
+  },
+  {
+    // Position along the strip = frequency. Four bands are blended with
+    // triangular weights, and each spot's colour changes as its band gets louder.
     name: 'spectrum_bars',
-    expr: '0.66 - 0.66*sat(1.5*(' +
-          'band(0)*sat(1-abs(x*3-0)) + ' +
-          'band(2)*sat(1-abs(x*3-1)) + ' +
-          'band(5)*sat(1-abs(x*3-2)) + ' +
-          'band(7)*sat(1-abs(x*3-3))))'
+    expr: '0.5 - 1.3*sat(1.5*(band(0)*sat(1-abs(x*3-0)) + band(2)*sat(1-abs(x*3-1)) + band(5)*sat(1-abs(x*3-2)) + band(7)*sat(1-abs(x*3-3))))'
   },
   {
-    // Kick drum bloom: the strip is teal until bass hits, then the middle of
-    // every strip flushes toward red/pink while the ends stay teal.
+    // Kick drum bloom: the middle of each strip changes colour when bass
+    // and level are both high, while the ends keep the base colour.
     name: 'bass_bloom',
-    expr: '0.5 + 0.45*sat(bass*2.5)*tri(x)'
-  },
-  {
-    // Gold base colour. Treble (hats, sibilance) adds a fast ripple that
-    // sweeps along the strip and swings the colour from red to green.
-    name: 'treble_shimmer',
-    expr: '0.15 + sat(treb*3)*0.25*sin(tau*x*12 - t*14)'
-  },
-  {
-    // Each physical strip listens to something different: strip 0 = bass,
-    // 1 = mids, 2 = treble, 3 = overall level. idx i picks the feature via
-    // sat(1-abs(i-n)), which is 1 for strip n and 0 for the others.
-    name: 'strip_per_band',
-    expr: '0.66 - 0.6*sat(2*(' +
-          'bass*sat(1-abs(i-0)) + ' +
-          'mid*sat(1-abs(i-1)) + ' +
-          'treb*sat(1-abs(i-2)) + ' +
-          'level*sat(1-abs(i-3)))) + x*0.06'
+    expr: '.55 + 12*sat(bass*level*.5)*tri(x)'
   }
 ];
 
