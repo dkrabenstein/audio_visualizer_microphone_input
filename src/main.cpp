@@ -258,6 +258,23 @@ static void setupHttpRoutes() {
         r->send(200, "application/json", s);
     });
 
+    // GET /api/audio -- latest audio features, read-only. The web UI's live
+    // sound meter polls this. Same data the expression VM sees.
+    server.on("/api/audio", HTTP_GET, [](AsyncWebServerRequest *r) {
+        AudioFeatures af;
+        audio_source_get(&af);
+        JsonDocument d;
+        JsonArray b = d["bands"].to<JsonArray>();
+        for (int i = 0; i < 8; i++) b.add(af.bands[i]);
+        d["level"] = af.level;
+        d["bass"]  = af.bass;
+        d["mid"]   = af.mid;
+        d["treb"]  = af.treb;
+        String s;
+        serializeJson(d, s);
+        r->send(200, "application/json", s);
+    });
+
     server.begin();
 }
 

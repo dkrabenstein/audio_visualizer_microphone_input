@@ -44,4 +44,5 @@ decrease abrupt changes in color
 make brightness adjustable
 add white light
 add plain color
+mic sensitivity control
 

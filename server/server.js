@@ -79,6 +79,13 @@ function beaconFresh() {
   return Date.now() - lastBeaconAt < BEACON_FRESH_MS;
 }
 
+// How the current address was found, so the UI can say so.
+function targetSource() {
+  if (!ESP32_IP) return 'none';
+  if (net.isIP(ESP32_HOST)) return 'manual';
+  return beaconFresh() ? 'beacon' : 'mdns';
+}
+
 resolveHost();
 setInterval(resolveHost, RESOLVE_INTERVAL_MS);
 
@@ -141,7 +148,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'GET' && req.url === '/api/config') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ host: ESP32_HOST, ip: ESP32_IP }));
+    return res.end(JSON.stringify({ host: ESP32_HOST, ip: ESP32_IP, source: targetSource() }));
   }
 
   // Body: { host: "visualizer.local" | "192.168.1.77" }. Replies once the
@@ -163,6 +170,7 @@ const server = http.createServer((req, res) => {
       dns.lookup(host, { family: 4 }, (err, address) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: !err, host, ip: err ? null : address,
+                                 source: err ? 'none' : (net.isIP(host) ? 'manual' : 'mdns'),
                                  error: err ? err.code : undefined }));
       });
     });

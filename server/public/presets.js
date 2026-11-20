@@ -7,7 +7,8 @@
 // The firmware turns each expression's result into a HUE only (fract(v) ->
 // CHSV hue, fixed saturation and brightness), so every pattern here is a
 // different way of mapping sound -> colour:
-//   hue 0.00 red, 0.16 yellow, 0.33 green, 0.50 cyan, 0.66 blue, 0.83 magenta
+//   FastLED hue scale (see fastled.js): 0.00 red, 0.125 orange, 0.25 yellow,
+//   0.375 green, 0.50 aqua, 0.625 blue, 0.75 purple, 0.875 pink
 //
 // Audio inputs are all 0..1: level, bass, mid, treb and band(0..7).
 //
@@ -52,4 +53,9 @@ const PRESETS = [
   }
 ];
 
+// The six presets occupy slots 1..6 (slot 0 is the firmware default).
+// The Advanced tab always uploads to, and runs from, slot 7 -- it has no slot picker.
 const PRESET_FIRST_SLOT = 1;
+const ADVANCED_SLOT = 7;
+// The Basic tab (single colour) uploads to, and runs from, slot 8.
+const BASIC_SLOT = 8;

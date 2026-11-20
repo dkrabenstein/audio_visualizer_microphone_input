@@ -31,33 +31,244 @@ button.primary{background:var(--acc);color:#0b0c10;border-color:var(--acc);
        font-weight:600}
 select{background:#0b0c10;border:1px solid var(--line);color:var(--fg);
        padding:8px;border-radius:5px;font:inherit}
-pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
-    white-space:pre-wrap}
 .ex{color:var(--acc);cursor:pointer;text-decoration:underline dotted;
     font-size:12px;margin-right:12px;display:inline-block;margin-top:4px}
 .meta{font-size:11px;color:var(--dim);margin-top:8px}
-#slots{margin-top:12px}
-#slots button{padding:6px 10px;font-size:12px}
-#slots button.active{background:var(--acc);color:#0b0c10;border-color:var(--acc);font-weight:600}
-#slots button:disabled{opacity:.35;cursor:default}
+/* --- tabs --- */
+.tabbar{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tabbar button{border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
+       background:none;color:var(--dim);padding:8px 16px;margin-bottom:-1px}
+.tabbar button:hover{color:var(--fg);border-color:var(--line)}
+.tabbar button.active{background:var(--panel);color:var(--fg);border-color:var(--line);
+       border-bottom:1px solid var(--panel)}
+.tab{display:none}
+.tab.active{display:block}
+.home p{margin:0 0 10px}
+.home ol{margin:0;padding-left:20px}
+.home li{margin-bottom:6px}
+.home .lead{font-size:15px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:10px;cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:var(--acc)}
+.card.active{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.card canvas{height:64px;margin-bottom:8px}
+.card .title{font-weight:600;font-size:13px;margin-bottom:2px}
+.card .blurb{font-size:12px;color:var(--dim)}
+#pat-status{font-size:12px;min-height:18px;margin-bottom:10px}
+#pat-status.ok{color:var(--ok)} #pat-status.err{color:var(--err)}
+#target{font-size:13px}
+#target.ok{color:var(--ok)}
+details.manual{margin-top:10px}
+details.manual summary{cursor:pointer;color:var(--dim);font-size:12px}
+details.manual summary:hover{color:var(--fg)}
+details.opts{margin-top:12px}
+details.opts summary{cursor:pointer;color:var(--dim);font-size:12px}
+details.opts summary:hover{color:var(--fg)}
+.opt{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;
+     font-size:12px;margin-top:10px}
+.opt .h{grid-column:1/-1;margin-top:8px;font-size:11px;text-transform:uppercase;
+        letter-spacing:.08em;color:var(--dim)}
+.opt code{color:var(--acc)}
+.opt span{color:var(--dim)}
+.wheelbox{position:relative;width:280px;height:280px;margin:6px auto 10px}
+.wheelbox canvas{width:280px;height:280px;border-radius:50%;cursor:crosshair;touch-action:none}
+#wheel-swatch{position:absolute;left:50%;top:50%;width:120px;height:120px;
+  margin:-60px 0 0 -60px;border-radius:50%;border:1px solid var(--line);background:#222;
+  pointer-events:none}
+#wheel-marker{position:absolute;width:22px;height:22px;border:3px solid #fff;
+  border-radius:50%;box-shadow:0 0 0 2px #000;transform:translate(-50%,-50%);
+  pointer-events:none;display:none}
+#basic-status{font-size:12px;min-height:18px;text-align:center}
+#basic-status.ok{color:var(--ok)} #basic-status.err{color:var(--err)}
+.rangeRow{display:flex;gap:12px;align-items:center}
+.rangeRow input[type=range]{flex:1;accent-color:var(--acc)}
+button:disabled{opacity:.4;cursor:default}
+.welcome{margin:22px 0 30px}
+.welcome-title{font-size:22px;font-weight:600;line-height:1.3;margin-bottom:8px}
+.welcome-text{font-size:15px;color:var(--dim)}
+.start-title{font-size:13px;font-weight:600;margin-bottom:12px}
+.navcards{display:flex;flex-direction:column;gap:10px}
+.navcard{display:block;width:100%;text-align:left;padding:14px 16px;border-radius:8px;
+         background:var(--panel);border:1px solid var(--line);color:var(--fg);cursor:pointer}
+.navcard:hover,.navcard:focus-visible{border-color:var(--acc);outline:none}
+.navcard .nc-title{display:block;font-weight:600;font-size:14px;margin-bottom:2px;color:var(--acc)}
+.navcard .nc-desc{display:block;font-size:12px;color:var(--dim)}
+#home-bar{height:8px;border-radius:4px;margin:6px 0 0}
+.greeting{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
+.nowcard{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
+         padding:12px;margin-bottom:26px;border-radius:8px;background:var(--panel);
+         border:1px solid var(--line);color:var(--fg);cursor:pointer}
+.nowcard:hover,.nowcard:focus-visible{border-color:var(--acc);outline:none}
+.nowcard canvas{width:100%;height:40px}
+.now-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.now-name{font-size:16px;font-weight:600}
+.now-sub{font-size:12px;color:var(--dim)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
+.dot.on{background:var(--ok)} .dot.off{background:var(--err)}
+.navcard{display:flex;align-items:center;gap:14px}
+.navcard .nc-text{display:block;flex:1}
+.navcard canvas,.navcard .swatch{flex:none;width:120px;height:36px;border-radius:4px}
+.swatch{display:block;border:1px dashed var(--line);background:transparent}
+.homegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
+#meter{height:90px}
+button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-color:var(--acc);font-weight:600}
+@media (max-width:640px){.homegrid{grid-template-columns:1fr}}
+.briRow input[type=range]{flex:0 1 65%}
+.swbox{flex:1;display:flex;justify-content:center;align-items:center}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>PATTERN COMPILER</h1>
-  <div class="sub">Hosted on PC &rarr; Simulated audio via UDP &rarr; ESP32-S3 render</div>
+<div class="wrap" style="padding-bottom:0">
+  <div class="tabbar" role="tablist">
+    <button id="btn-home" role="tab" data-tab="home">Home</button>
+    <button id="btn-basic" role="tab" data-tab="basic">Basic</button>
+    <button id="btn-patterns" role="tab" data-tab="patterns">Patterns</button>
+    <button id="btn-advanced" role="tab" data-tab="advanced">Advanced</button>
+  </div>
+</div>
 
-  <div class="panel">
-    <div class="row">
-      <div>
-        <label>ESP32 hostname or IP</label>
-        <input id="esp_ip" type="text" value="visualizer.local" style="width:180px">
+<div id="tab-home" class="tab home">
+  <div class="wrap">
+    <h1>AUDIO VISUALIZER</h1>
+    <canvas id="home-bar" width="600" height="8"></canvas>
+
+    <div class="welcome">
+      <div class="greeting" id="greeting"></div>
+      <div class="welcome-title">Welcome to your home lighting display!</div>
+      <div class="welcome-text">You can adjust the lights to fit whatever you're feeling right now</div>
+    </div>
+
+    <button class="nowcard" id="nowcard" data-go="patterns">
+      <canvas id="now-strip" width="480" height="40"></canvas>
+      <span><span class="dot" id="now-dot"></span><span class="now-label">Now showing</span></span>
+      <span class="now-name" id="now-name">checking the lights&hellip;</span>
+      <span class="now-sub" id="now-sub"></span>
+    </button>
+
+    <div class="start-title">To get started just click on one of the options below</div>
+    <div class="navcards">
+      <button class="navcard" data-go="basic">
+        <span class="nc-text">
+          <span class="nc-title">Basic</span>
+          <span class="nc-desc">Choose a single colour for the lights and set how bright they are.</span>
+        </span>
+        <span class="swatch" id="prev-basic"></span>
+      </button>
+      <button class="navcard" data-go="patterns">
+        <span class="nc-text">
+          <span class="nc-title">Patterns</span>
+          <span class="nc-desc">Pick one of six lighting patterns that move with the music around you.</span>
+        </span>
+        <canvas id="prev-patterns" width="120" height="36"></canvas>
+      </button>
+      <button class="navcard" data-go="advanced">
+        <span class="nc-text">
+          <span class="nc-title">Advanced</span>
+          <span class="nc-desc">Write your own formula for the lights and watch a live preview.</span>
+        </span>
+        <canvas id="prev-advanced" width="120" height="36"></canvas>
+      </button>
+    </div>
+
+    <div class="homegrid">
+      <div class="panel">
+        <label>live sound</label>
+        <canvas id="meter" width="320" height="90"></canvas>
+        <div class="meta" id="meter-src">connecting&hellip;</div>
       </div>
-      <div style="align-self: flex-end;">
-        <button id="save_ip">Update ESP32 Target</button>
+      <div class="panel">
+        <label>quick controls</label>
+        <div class="row" style="justify-content:center">
+          <button class="switch" id="pwr" aria-pressed="true">Lights on</button>
+        </div>
+        <div class="rangeRow" style="margin-top:14px">
+          <input id="home-bri" type="range" min="0" max="100" value="100">
+          <span id="home-bri-val" style="min-width:42px;text-align:right">100%</span>
+        </div>
+        <div class="meta">on/off and brightness aren't connected to the lights yet</div>
       </div>
     </div>
-    <div class="meta" id="target">&mdash;</div>
+  </div>
+</div>
+
+<div id="tab-basic" class="tab">
+  <div class="wrap">
+    <h1>BASIC CONTROLS</h1>
+    <div class="sub">pick a constant colour and change the brightness</div>
+
+    <div class="panel">
+      <label>colour</label>
+      <div class="wheelbox">
+        <canvas id="wheel" width="560" height="560"></canvas>
+        <div id="wheel-swatch"></div>
+        <div id="wheel-marker"></div>
+      </div>
+      <div id="basic-status">choose a colour on the wheel</div>
+    </div>
+
+    <div class="panel">
+      <label>white</label>
+      <div class="row">
+        <button id="white-warm" disabled title="needs a firmware update">Warm white</button>
+        <button id="white-neutral" disabled title="needs a firmware update">White</button>
+        <button id="white-cool" disabled title="needs a firmware update">Cool white</button>
+        <span class="meta" style="margin:0">not available yet &mdash; the lights currently can't make white</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <label>brightness</label>
+      <div class="rangeRow briRow">
+        <input id="bri" type="range" min="0" max="100" value="100">
+        <span id="bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div class="swbox">
+          <button class="switch" id="pwr-basic" aria-pressed="true" style="min-width:96px">Lights on</button>
+        </div>
+      </div>
+      <div class="meta">not connected to the lights yet</div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-patterns" class="tab">
+  <div class="wrap">
+    <h1>PATTERNS</h1>
+    <div class="sub">pick a lighting pattern &middot; images show a sample moment of music</div>
+    <div id="pat-status"></div>
+    <div class="cards" id="cards"></div>
+
+    <div class="panel" style="margin-top:14px">
+      <label>brightness</label>
+      <div class="rangeRow briRow">
+        <input id="pat-bri" type="range" min="0" max="100" value="100">
+        <span id="pat-bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div class="swbox">
+          <button class="switch" id="pwr-pat" aria-pressed="true" style="min-width:96px">Lights on</button>
+        </div>
+      </div>
+      <div class="meta">not connected to the lights yet</div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-advanced" class="tab">
+<div class="wrap">
+  <h1 style="margin-bottom:18px">ADVANCED CONFIGURATIONS</h1>
+
+  <div class="panel">
+    <label>ESP32 connection</label>
+    <div id="target">searching for ESP32&hellip;</div>
+    <details class="manual">
+      <summary>manual override</summary>
+      <div class="row" style="margin-top:8px">
+        <input id="esp_ip" type="text" value="visualizer.local" style="width:180px">
+        <button id="save_ip">Use this address</button>
+        <button id="auto_ip">Auto-detect</button>
+      </div>
+      <div class="meta">Enter a hostname or IP to pin the board (this turns the beacon off).
+        Auto-detect goes back to the default, where the board's beacon finds it.</div>
+    </details>
   </div>
 
   <div class="panel">
@@ -66,61 +277,81 @@ pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
            value="0.5 + 0.5*sin(tau*x*2 + t) + bass*0.3">
     <div id="status"></div>
     <div id="examples"></div>
+    <details class="opts">
+      <summary>options</summary>
+      <div class="opt">
+        <div class="h">operators</div>
+        <code>+  -  *  /</code><span>add, subtract, multiply, divide (dividing by 0 gives 0)</span>
+        <code>%</code><span>remainder (x % 0 gives 0)</span>
+        <code>^</code><span>power, e.g. x^2 (evaluated before * and /)</span>
+        <code>-x</code><span>negate; also +x</span>
+        <code>( )</code><span>grouping</span>
+
+        <div class="h">inputs</div>
+        <code>x</code><span>position along the strip, 0 (start) to 1 (end)</span>
+        <code>t</code><span>time in seconds</span>
+        <code>i</code><span>strip number: 0, 1, 2, 3</span>
+        <code>level</code><span>overall loudness, 0 to 1</span>
+        <code>bass</code><span>low frequencies, 0 to 1</span>
+        <code>mid</code><span>middle frequencies, 0 to 1</span>
+        <code>treb</code><span>high frequencies, 0 to 1</span>
+        <code>band(n)</code><span>one of 8 frequency bands, n = 0 (lowest) to 7 (highest), 0 to 1; n must be a plain number</span>
+
+        <div class="h">functions</div>
+        <code>sin(a)  cos(a)</code><span>sine and cosine, a in radians</span>
+        <code>abs(a)</code><span>absolute value</span>
+        <code>floor(a)</code><span>round down to a whole number</span>
+        <code>fract(a)</code><span>fractional part, a minus floor(a)</span>
+        <code>sqrt(a)</code><span>square root (negative gives 0)</span>
+        <code>sat(a)</code><span>clamp to 0..1</span>
+        <code>tri(a)</code><span>triangle wave, repeats every 1, ranges 0..1</span>
+        <code>min(a, b)  max(a, b)</code><span>smaller / larger of two values</span>
+        <code>pow(a, b)</code><span>a to the power b</span>
+
+        <div class="h">constants</div>
+        <code>pi  tau  e</code><span>3.14159, 6.28318 (2&middot;pi), 2.71828</span>
+
+        <div class="h">result</div>
+        <code>hue</code><span>the answer wraps around the LED colour wheel: 0 red, 0.125 orange, 0.25 yellow, 0.375 green, 0.5 aqua, 0.625 blue, 0.75 purple, 0.875 pink, 1 red again</span>
+        <code>limit</code><span>at most 64 operations per expression</span>
+      </div>
+    </details>
   </div>
 
   <div class="panel">
-    <label>preview &mdash; strip 0, simulated audio from PC streamer</label>
+    <label>preview</label>
     <canvas id="cv" width="600" height="70"></canvas>
-    <div class="meta" id="perf"></div>
   </div>
+
+  <div class="panel">
+      <label>brightness</label>
+      <div class="rangeRow briRow">
+        <input id="adv-bri" type="range" min="0" max="100" value="100">
+        <span id="adv-bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div class="swbox">
+          <button class="switch" id="pwr-adv" aria-pressed="true" style="min-width:96px">Lights on</button>
+        </div>
+      </div>
+      <div class="meta">not connected to the lights yet</div>
+    </div>
 
   <div class="panel">
     <div class="row">
-      <label style="margin:0">slot</label>
-      <select id="slot"></select>
-      <input id="name" type="text" placeholder="name" style="width:160px">
       <button class="primary" id="send">Upload &amp; activate</button>
       <button id="refresh">Refresh Device</button>
     </div>
-    <div class="meta" id="devstat">device: not polled</div>
-    <label style="margin-top:12px">stored slots &mdash; click to switch, no upload needed</label>
-    <div class="row" id="slots"></div>
   </div>
 
-  <div class="panel">
-    <label>compiled bytecode</label>
-    <pre id="dis">—</pre>
-  </div>
+</div>
+
 </div>
 
 <script src="compiler.js"></script>
 <script src="presets.js"></script>
+<script src="fastled.js"></script>
 <script>
 const $ = s => document.querySelector(s);
-const NAMES = {0:'CONST',1:'X',2:'T',3:'IDX',4:'BAND',5:'LEVEL',6:'BASS',
-  7:'MID',8:'TREB',16:'ADD',17:'SUB',18:'MUL',19:'DIV',20:'MOD',21:'POW',
-  22:'MIN',23:'MAX',32:'NEG',33:'SIN',34:'COS',35:'ABS',36:'FLOOR',
-  37:'FRACT',38:'SQRT',39:'SAT',40:'TRI'};
-
 let code = null;
-
-for (let i = 0; i < 16; i++) {
-  const o = document.createElement('option');
-  o.value = i; o.textContent = 'slot ' + i;
-  $('#slot').appendChild(o);
-}
-
-function disasm(c) {
-  let depth = 0;
-  return c.map((op, n) => {
-    const [o, a] = op;
-    const pops = o <= 8 ? 0 : (o >= 16 && o <= 23 ? 2 : 1);
-    depth = depth - pops + 1;
-    const arg = a !== undefined ? '  ' + (+a.toFixed(6)) : '';
-    return String(n).padStart(3, '0') + '  ' +
-           NAMES[o].padEnd(6) + arg.padEnd(12) + '; depth ' + depth;
-  }).join('\n');
-}
 
 function build() {
   const src = $('#expr').value;
@@ -129,13 +360,11 @@ function build() {
     $('#status').className = 'ok';
     $('#status').textContent =
       '\u2713 ' + code.length + ' ops, ' + (code.length * 8) + ' bytes';
-    $('#dis').textContent = disasm(code);
   } catch (e) {
     code = null;
     $('#status').className = 'err';
     $('#status').textContent = '\u2717 ' + e.message +
       (e.pos !== undefined ? '  (col ' + (e.pos + 1) + ')' : '');
-    $('#dis').textContent = '—';
   }
 }
 
@@ -144,46 +373,77 @@ function build() {
 let espIp = null;
 const espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
 
+const DEFAULT_HOST = 'visualizer.local';
+let lastIp = null;
+
 function showTarget(j) {
   espIp = j.ip;
-  $('#target').textContent = j.ip
-    ? j.host + ' → ' + j.ip
-    : j.host + ' → not found' + (j.error ? ' (' + j.error + ')' : '');
+  const el = $('#target');
+  if (!j.ip) {
+    el.className = '';
+    el.textContent = 'searching for ESP32\u2026 (' + j.host +
+      (j.error ? ': ' + j.error : '') + ')';
+  } else {
+    el.className = 'ok';
+    el.textContent = '\u2713 ESP32 found at ' + j.ip +
+      (j.source === 'beacon' ? ' (auto-detected by beacon)'
+       : j.source === 'manual' ? ' (manual address)'
+       : ' (' + j.host + ')');
+  }
+  // A board that moved to a new address has no patterns yet: send them again.
+  if (j.ip && lastIp && j.ip !== lastIp) { uploadPresets(); poll(); }
+  if (j.ip) lastIp = j.ip;
 }
 
-// Point the Node server's UDP stream at a new host or IP
-$('#save_ip').onclick = async () => {
-  const host = $('#esp_ip').value.trim();
-  $('#target').textContent = 'resolving ' + host + '…';
+// Ask the Node server what it currently knows. The beacon can change the
+// address at any time (DHCP), so this runs every few seconds.
+async function refreshTarget() {
+  try {
+    const j = await (await fetch('/api/config')).json();
+    if (document.activeElement !== $('#esp_ip')) $('#esp_ip').value = j.host;
+    showTarget(j);
+    return j;
+  } catch (e) {
+    $('#target').className = '';
+    $('#target').textContent = 'dev server unreachable';
+    return null;
+  }
+}
+
+// Point the Node server's UDP stream at a new host or IP.
+async function setTarget(host) {
+  $('#target').className = '';
+  $('#target').textContent = 'resolving ' + host + '\u2026';
   try {
     const j = await (await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ host })
     })).json();
+    lastIp = null;      // handled by the explicit upload below
     showTarget(j);
   } catch (e) {
     $('#target').textContent = 'dev server unreachable';
   }
   uploadPresets();  // a new target has no presets yet
-};
+}
+
+$('#save_ip').onclick = () => setTarget($('#esp_ip').value.trim());
+$('#auto_ip').onclick = () => { $('#esp_ip').value = DEFAULT_HOST; setTarget(DEFAULT_HOST); };
 
 // Start with whatever the Node server is currently streaming to. Its first
 // lookup may still be running, so retry briefly until an IP comes back.
 (async function loadTarget(tries) {
-  try {
-    const j = await (await fetch('/api/config')).json();
-    $('#esp_ip').value = j.host;
-    showTarget(j);
-    if (!j.ip && tries > 0) return setTimeout(() => loadTarget(tries - 1), 1000);
-  } catch (e) {}
+  const j = await refreshTarget();
+  if (j && !j.ip && tries > 0) return setTimeout(() => loadTarget(tries - 1), 1000);
   uploadPresets();
 })(5);
+setInterval(refreshTarget, 3000);
 
 // --- Preview using simulated audio synced from the PC server ---
 const cv = $('#cv'), cx = cv.getContext('2d');
 const N = 150, W = cv.width / N;
-let t0 = performance.now(), acc = 0, samples = 0;
+let t0 = performance.now();
 let liveAudio = { bands: [0,0,0,0,0,0,0,0], level: 0, bass: 0, mid: 0, treb: 0 };
 
 setInterval(async () => {
@@ -210,22 +470,12 @@ function frame() {
       level: liveAudio.level
     };
 
-    const s = performance.now();
     for (let p = 0; p < N; p++) {
       ctx.x = p / (N - 1);
       let v = evalCode(code, ctx);
       v = v - Math.floor(v);
-      cx.fillStyle = 'hsl(' + (v * 360) + ',85%,55%)';
+      cx.fillStyle = fastledCss(v);
       cx.fillRect(p * W, 0, W + 1, cv.height);
-    }
-    acc += performance.now() - s; 
-    samples++;
-    if (samples >= 60) {
-      $('#perf').textContent =
-        (acc / samples * 1000 / N).toFixed(2) + ' \u00b5s/pixel in this browser \u00b7 ' +
-        N + ' px/frame';
-      acc = 0; 
-      samples = 0;
     }
   }
   requestAnimationFrame(frame);
@@ -235,8 +485,8 @@ requestAnimationFrame(frame);
 // --- Send bytecode directly to ESP32 HTTP Server ---
 $('#send').onclick = async () => {
   if (!code) { $('#status').textContent = '\u2717 fix the expression first'; return; }
-  const slot = +$('#slot').value;
-  const name = $('#name').value || 'untitled';
+  const slot = ADVANCED_SLOT;
+  const name = 'advanced';
 
   try {
     const r = await fetch(espUrl() + '/api/pattern', {
@@ -255,7 +505,7 @@ $('#send').onclick = async () => {
 
     $('#status').className = 'ok';
     $('#status').textContent =
-      '\u2713 slot ' + j.slot + ': ' + j.ops + ' ops, depth ' + j.depth;
+      '\u2713 uploaded: ' + j.ops + ' ops, depth ' + j.depth;
     poll();
   } catch (e) {
     $('#status').className = 'err';
@@ -266,46 +516,10 @@ $('#send').onclick = async () => {
 async function poll() {
   try {
     const j = await (await fetch(espUrl() + '/api/slots')).json();
-    const used = j.slots.filter(s => s.used)
-                        .map(s => s.i + ':' + s.name).join('  ');
-    $('#devstat').textContent =
-      'active slot ' + j.active + ' \u00b7 ' + j.fps.toFixed(1) + ' fps \u00b7 ' +
-      j.evalUs + ' \u00b5s/frame in VM \u00b7 ' + (used || 'no slots stored');
-    renderSlots(j);
+    document.dispatchEvent(new CustomEvent('devstate', { detail: j }));
   } catch (e) {
-    $('#devstat').textContent = 'device: offline (preview still works)';
+    document.dispatchEvent(new CustomEvent('devoffline'));  // the preview still works
   }
-}
-
-// One button per slot. Empty slots are disabled because the firmware
-// rejects /api/select for a slot that was never uploaded.
-function renderSlots(j) {
-  const box = $('#slots');
-  box.textContent = '';
-  j.slots.forEach(s => {
-    const b = document.createElement('button');
-    b.textContent = s.i + (s.used ? ': ' + s.name : '');
-    b.disabled = !s.used;
-    if (s.i === j.active) b.className = 'active';
-    b.onclick = () => selectSlot(s.i);
-    box.appendChild(b);
-  });
-}
-
-async function selectSlot(i) {
-  try {
-    const r = await fetch(espUrl() + '/api/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'slot=' + i });
-    if (!r.ok) throw new Error((await r.json()).error || r.status);
-    $('#status').className = 'ok';
-    $('#status').textContent = '\u2713 switched to slot ' + i;
-  } catch (e) {
-    $('#status').className = 'err';
-    $('#status').textContent = '\u2717 device: ' + e.message;
-  }
-  poll();
 }
 
 $('#refresh').onclick = poll;
@@ -313,16 +527,16 @@ $('#refresh').onclick = poll;
 PRESETS.forEach((p, n) => {
   const el = document.createElement('span');
   el.className = 'ex';
-  el.textContent = (PRESET_FIRST_SLOT + n) + ': ' + p.name;
+  el.textContent = p.name;
   el.title = p.expr;
   el.onclick = () => {
-    $('#expr').value = p.expr; $('#name').value = p.name;
-    $('#slot').value = PRESET_FIRST_SLOT + n; build();
+    $('#expr').value = p.expr;
+    build();
   };
   $('#examples').appendChild(el);
 });
 
-// Upload every preset to slots 1..5. Only /api/pattern is called, never
+// Upload every preset to its own slot (PRESET_FIRST_SLOT onward). Only /api/pattern is called, never
 // /api/select, so the running pattern is not interrupted.
 async function uploadPresets() {
   try {
@@ -335,8 +549,7 @@ async function uploadPresets() {
       if (!r.ok) throw new Error(p.name + ': ' + ((await r.json()).error || r.status));
     }
     $('#status').className = 'ok';
-    $('#status').textContent = '✓ presets loaded into slots ' + PRESET_FIRST_SLOT +
-      '-' + (PRESET_FIRST_SLOT + PRESETS.length - 1);
+    $('#status').textContent = '✓ patterns loaded';
   } catch (e) {
     $('#status').className = 'err';
     $('#status').textContent = '✗ preset upload: ' + e.message;
@@ -347,6 +560,434 @@ async function uploadPresets() {
 $('#expr').addEventListener('input', build);
 
 build();
+</script>
+<script>
+// --- tabs -------------------------------------------------------------
+(function () {
+  const tabs = ['home', 'basic', 'patterns', 'advanced'];
+  function showTab(name) {
+    if (!tabs.includes(name)) name = 'home';
+    tabs.forEach(function (t) {
+      document.getElementById('tab-' + t).classList.toggle('active', t === name);
+      document.getElementById('btn-' + t).classList.toggle('active', t === name);
+    });
+    try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  }
+  document.querySelectorAll('.tabbar button').forEach(function (b) {
+    b.onclick = function () { showTab(b.dataset.tab); };
+  });
+  document.querySelectorAll('[data-go]').forEach(function (b) {
+    b.onclick = function () { showTab(b.dataset.go); };
+  });
+  showTab(location.hash.slice(1) || 'home');
+})();
+</script>
+<script>
+// --- patterns tab -----------------------------------------------------------
+(function () {
+  // Friendly text for the six presets (keyed by preset name in presets.js).
+  var INFO = {
+    dominant_frequency: ['Dominant Frequency',
+      'One colour for the whole strip that follows the pitch: deep sounds are red, high sounds move round the colour wheel.'],
+    spectrum_hue_shift: ['Spectrum Hue Shift',
+      'A rainbow along the strip. Bass, mid and treble each push the colour in their own part of the strip.'],
+    level_line: ['Level Line',
+      'A bar that grows from the start of the strip with the bass. Blue-to-green inside the bar, red outside.'],
+    level_line_2: ['Level Line 2',
+      'The same bar with a different colour scheme.'],
+    spectrum_bars: ['Spectrum Bars',
+      'Position along the strip is pitch. Each region changes colour as its part of the spectrum gets louder.'],
+    bass_bloom: ['Bass Bloom',
+      'Kick drums make the middle of the strip bloom into a new colour while the ends stay put.']
+  };
+
+  // A fixed, representative moment of music so every image is comparable.
+  var bands = [0.8, 0.6, 0.5, 0.4, 0.3, 0.35, 0.25, 0.15];
+  var sample = {
+    t: 3, i: 0, bands: bands,
+    bass: (bands[0] + bands[1]) / 2,
+    mid: (bands[2] + bands[3] + bands[4]) / 3,
+    treb: (bands[5] + bands[6] + bands[7]) / 3,
+    level: bands.reduce(function (a, b) { return a + b; }) / bands.length
+  };
+
+  function paint(canvas, expr) {
+    var cx = canvas.getContext('2d'), N = 120, w = canvas.width / N;
+    cx.fillStyle = '#000'; cx.fillRect(0, 0, canvas.width, canvas.height);
+    var code;
+    try { code = compile(expr); } catch (e) { return; }
+    for (var p = 0; p < N; p++) {
+      sample.x = p / (N - 1);
+      var v = evalCode(code, sample);
+      v = v - Math.floor(v);
+      cx.fillStyle = fastledCss(v);
+      cx.fillRect(p * w, 0, w + 1, canvas.height);
+    }
+  }
+
+  function status(ok, msg) {
+    var el = document.getElementById('pat-status');
+    el.className = ok ? 'ok' : 'err';
+    el.textContent = msg;
+  }
+
+  function markActive(slot) {
+    document.querySelectorAll('.card').forEach(function (c) {
+      c.classList.toggle('active', +c.dataset.slot === slot);
+    });
+  }
+
+  async function choose(n) {
+    var slot = PRESET_FIRST_SLOT + n;
+    var title = (INFO[PRESETS[n].name] || [PRESETS[n].name])[0];
+    // The laptop page talks to the ESP32 directly (espUrl); the board's own page uses its own address.
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    try {
+      var r = await fetch(base + '/api/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'slot=' + slot });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      markActive(slot);
+      status(true, '\u2713 now showing: ' + title);
+    } catch (e) {
+      status(false, '\u2717 could not switch pattern: ' + e.message);
+    }
+  }
+
+  var box = document.getElementById('cards');
+  PRESETS.forEach(function (p, n) {
+    var info = INFO[p.name] || [p.name, ''];
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.slot = PRESET_FIRST_SLOT + n;
+    var cv = document.createElement('canvas');
+    cv.width = 360; cv.height = 64;
+    var title = document.createElement('div');
+    title.className = 'title'; title.textContent = info[0];
+    var blurb = document.createElement('div');
+    blurb.className = 'blurb'; blurb.textContent = info[1];
+    card.appendChild(cv); card.appendChild(title); card.appendChild(blurb);
+    card.onclick = function () { choose(n); };
+    box.appendChild(card);
+    paint(cv, p.expr);
+  });
+
+  // Highlight the pattern that is running whenever the device state refreshes.
+  document.addEventListener('devstate', function (e) { markActive(e.detail.active); });
+
+})();
+</script>
+<script>
+// --- basic tab --------------------------------------------------------------
+(function () {
+  var cv = document.getElementById('wheel');
+  var size = cv.width, c = size / 2, outer = c, inner = c * 0.68;
+  var cx = cv.getContext('2d');
+  var img = cx.createImageData(size, size);
+  for (var py = 0; py < size; py++) {
+    for (var px = 0; px < size; px++) {
+      var dx = px + 0.5 - c, dy = py + 0.5 - c;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      var k = (py * size + px) * 4;
+      if (d > outer || d < inner) { img.data[k + 3] = 0; continue; }
+      var deg = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;  // 0 at top, clockwise
+      var rgb = rainbowRGB(Math.min(254, Math.floor(deg / 360 * 255)));
+      img.data[k] = rgb[0]; img.data[k + 1] = rgb[1]; img.data[k + 2] = rgb[2];
+      // soften the two edges of the ring
+      img.data[k + 3] = Math.round(255 * Math.min(1, outer - d, d - inner));
+    }
+  }
+  cx.putImageData(img, 0, 0);
+
+  var marker = document.getElementById('wheel-marker');
+  var swatch = document.getElementById('wheel-swatch');
+  var statusEl = document.getElementById('basic-status');
+
+  function status(cls, msg) { statusEl.className = cls; statusEl.textContent = msg; }
+
+  function show(h) {
+    var rgb = rainbowRGB(h);
+    var col = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    swatch.style.background = col;
+    marker.style.background = col;
+    var css = cv.getBoundingClientRect().width || 280;
+    var rad = css / 2 * (1 + 0.68) / 2;                       // middle of the ring
+    var ang = ((h + 0.5) / 255 * 360 - 90) * Math.PI / 180;
+    marker.style.left = (css / 2 + rad * Math.cos(ang)) + 'px';
+    marker.style.top = (css / 2 + rad * Math.sin(ang)) + 'px';
+    marker.style.display = 'block';
+  }
+
+  // Send "constant hue" to its own slot and switch to it. Only the newest
+  // colour matters while dragging, so requests never pile up.
+  var busy = false, pending = null;
+  async function apply(h) {
+    if (busy) { pending = h; return; }
+    busy = true;
+    // The board does (uint8)(fract(v) * 255), so it can show hues 0..254; the +0.5
+    // keeps float rounding from landing one step low.
+    var expr = String((h + 0.5) / 255);
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    try {
+      var r = await fetch(base + '/api/pattern', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toPayload('basic', BASIC_SLOT, compile(expr)))
+      });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      var r2 = await fetch(base + '/api/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'slot=' + BASIC_SLOT });
+      if (!r2.ok) throw new Error((await r2.json()).error || r2.status);
+      status('ok', '\u2713 lights set to this colour');
+    } catch (e) {
+      status('err', '\u2717 could not reach the lights: ' + e.message);
+    }
+    busy = false;
+    if (pending !== null) { var n = pending; pending = null; apply(n); }
+  }
+
+  function hueAt(ev) {
+    var rect = cv.getBoundingClientRect();
+    var dx = ev.clientX - rect.left - rect.width / 2;
+    var dy = ev.clientY - rect.top - rect.height / 2;
+    var d = Math.sqrt(dx * dx + dy * dy) / (rect.width / 2);
+    if (d < 0.68 - 0.04 || d > 1.04) return null;             // not on the ring
+    var deg = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+    return Math.min(254, Math.floor(deg / 360 * 255));
+  }
+
+  var dragging = false, last = -1;
+  function pick(ev) {
+    var h = hueAt(ev);
+    if (h === null || h === last) return;
+    last = h; show(h); apply(h);
+    window.basicHue = h;
+    try { localStorage.setItem('viz.basicHue', String(h)); } catch (err) {}
+  }
+  cv.addEventListener('pointerdown', function (ev) {
+    if (hueAt(ev) === null) return;
+    dragging = true; cv.setPointerCapture(ev.pointerId); pick(ev);
+  });
+  cv.addEventListener('pointermove', function (ev) { if (dragging) pick(ev); });
+  cv.addEventListener('pointerup', function () { dragging = false; });
+  cv.addEventListener('pointercancel', function () { dragging = false; });
+
+  // Brightness: the control is here, the lights don't use it yet.
+  var bri = document.getElementById('bri'), briVal = document.getElementById('bri-val');
+  bri.addEventListener('input', function () { briVal.textContent = bri.value + '%'; });
+})();
+</script>
+<script>
+// --- home page --------------------------------------------------------------
+(function () {
+  var el = function (id) { return document.getElementById(id); };
+  var home = el('tab-home');
+  var isHome = function () { return home.classList.contains('active') && !document.hidden; };
+
+  // Greeting from the viewer's local time.
+  (function () {
+    var h = new Date().getHours();
+    el('greeting').textContent =
+      h >= 5 && h < 12 ? 'Good morning' :
+      h >= 12 && h < 17 ? 'Good afternoon' :
+      h >= 17 && h < 22 ? 'Good evening' : 'Hello';
+  })();
+
+  function title(name) {
+    return name.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  // ---- compiled expressions for the little previews ----
+  var presetCode = PRESETS.map(function (p) { try { return compile(p.expr); } catch (e) { return null; } });
+  var defaultCode = compile('0.3*x + 0.03*t + bass + 1.5*level');
+  if (typeof window.basicHue !== 'number') {
+    try {
+      var saved = parseInt(localStorage.getItem('viz.basicHue'), 10);
+      if (saved >= 0 && saved <= 254) window.basicHue = saved;
+    } catch (e) {}
+  }
+
+  // ---- audio feed (for the meter and so previews react to real sound) ----
+  var audio = null, live = false, fetching = false;
+  function synth(t) {            // gentle fake audio when nothing is reachable
+    var b = [];
+    for (var k = 0; k < 8; k++) b.push(0.5 + 0.5 * Math.sin(t * (1.3 + k * 0.4) + k));
+    return { bands: b, bass: (b[0] + b[1]) / 2, mid: (b[2] + b[3] + b[4]) / 3,
+             treb: (b[5] + b[6] + b[7]) / 3,
+             level: b.reduce(function (a, c) { return a + c; }) / 8 };
+  }
+  async function getJson(url) {
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok) throw new Error(r.status);
+      return await r.json();
+    } finally { clearTimeout(to); }
+  }
+  async function fetchAudio() {
+    if (fetching || !isHome()) return;
+    fetching = true;
+    var onLaptop = (typeof espUrl === 'function');
+    var base = onLaptop ? espUrl() : '';
+    try {
+      audio = await getJson(base + '/api/audio');
+      live = true;
+      el('meter-src').textContent = 'live from the lights';
+    } catch (e) {
+      live = false;
+      var done = false;
+      if (onLaptop) {              // the PC server also streams simulated audio
+        try {
+          audio = await getJson('/api/audio');
+          live = true; done = true;
+          el('meter-src').textContent = 'simulated by the PC (lights not reachable)';
+        } catch (e2) {}
+      }
+      if (!done) el('meter-src').textContent = 'no signal \u2014 lights not reachable';
+    }
+    fetching = false;
+  }
+  setInterval(fetchAudio, 150);
+
+  // ---- device state (running pattern, online or not) ----
+  var dev = { online: null, active: null };
+  var polling = false;
+  document.addEventListener('devstate', function (e) {
+    dev.online = true; dev.active = e.detail.active; renderNow();
+  });
+  document.addEventListener('devoffline', function () { dev.online = false; renderNow(); });
+  setInterval(function () {
+    if (!isHome() || polling) return;
+    polling = true;
+    Promise.resolve(poll()).then(function () { polling = false; }, function () { polling = false; });
+  }, 3000);
+
+  var nowCard = el('nowcard');
+  function presetIndex(slot) {
+    var n = slot - PRESET_FIRST_SLOT;
+    return (n >= 0 && n < PRESETS.length) ? n : -1;
+  }
+  function renderNow() {
+    var name, sub, go = 'patterns', dot = '';
+    if (dev.online === null) {
+      name = 'checking the lights\u2026'; sub = '';
+    } else if (!dev.online) {
+      name = 'Lights not reachable'; dot = 'off';
+      sub = 'check that the board is powered and on your network';
+    } else {
+      dot = 'on'; sub = 'click to change';
+      var a = dev.active, n = presetIndex(a);
+      if (n >= 0) name = title(PRESETS[n].name);
+      else if (a === BASIC_SLOT) { name = 'Single colour'; go = 'basic'; }
+      else if (a === ADVANCED_SLOT) { name = 'Custom formula'; go = 'advanced'; }
+      else name = 'Default colours';
+    }
+    el('now-name').textContent = name;
+    el('now-sub').textContent = sub;
+    el('now-dot').className = 'dot' + (dot ? ' ' + dot : '');
+    nowCard.dataset.go = go;
+  }
+  renderNow();
+
+  // ---- drawing helpers ----
+  function paintStrip(cv, c, t, a) {
+    var g = cv.getContext('2d'), n = 80, w = cv.width / n;
+    g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+    if (!c) return;
+    var ctx = { t: t, i: 0, bands: a.bands, bass: a.bass, mid: a.mid, treb: a.treb, level: a.level };
+    for (var p = 0; p < n; p++) {
+      ctx.x = p / (n - 1);
+      g.fillStyle = fastledCss(evalCode(c, ctx));
+      g.fillRect(p * w, 0, w + 1, cv.height);
+    }
+  }
+  function paintSolid(cv, h) {
+    var g = cv.getContext('2d'), c = rainbowRGB(h);
+    g.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    g.fillRect(0, 0, cv.width, cv.height);
+  }
+  function drawBar(t) {
+    var cv = el('home-bar'), g = cv.getContext('2d'), n = 150, w = cv.width / n;
+    for (var p = 0; p < n; p++) {
+      g.fillStyle = fastledCss(p / (n - 1) * 0.6 + t * 0.04);
+      g.fillRect(p * w, 0, w + 1, cv.height);
+    }
+  }
+  var shown = [0, 0, 0, 0, 0, 0, 0, 0];
+  function drawMeter(a) {
+    var cv = el('meter'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    var n = 8, gap = 10, bw = (W - gap * (n + 1)) / n;
+    for (var i = 0; i < n; i++) {
+      var target = live ? Math.max(0, Math.min(1, a.bands[i] || 0)) : 0;
+      shown[i] += (target - shown[i]) * (target > shown[i] ? 0.5 : 0.15);   // fast up, slow down
+      var h = shown[i] * (H - 8);
+      g.fillStyle = fastledCss(i / 9);
+      g.fillRect(gap + i * (bw + gap), H - 4 - h, bw, Math.max(2, h));
+    }
+  }
+
+  function nowCode() {
+    if (!dev.online) return null;
+    var a = dev.active, n = presetIndex(a);
+    if (n >= 0) return presetCode[n];
+    if (a === ADVANCED_SLOT) return (typeof code !== 'undefined') ? code : null;
+    if (a === BASIC_SLOT) return null;            // drawn as a solid colour
+    return defaultCode;
+  }
+
+  function frame(now) {
+    if (isHome()) {
+      var t = now / 1000;
+      var a = (live && audio) ? audio : synth(t);
+
+      drawBar(t);
+
+      var strip = el('now-strip'), hue = window.basicHue;
+      if (dev.online && dev.active === BASIC_SLOT && typeof hue === 'number') paintSolid(strip, hue);
+      else paintStrip(strip, nowCode(), t, a);
+
+      var sw = el('prev-basic');
+      if (typeof hue === 'number') {
+        var c = rainbowRGB(hue);
+        sw.style.background = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+        sw.style.borderStyle = 'solid';
+      } else { sw.style.background = 'transparent'; sw.style.borderStyle = 'dashed'; }
+
+      var pi = (dev.online && presetIndex(dev.active) >= 0)
+        ? presetIndex(dev.active)
+        : Math.floor(t / 3) % PRESETS.length;     // otherwise flip through them
+      paintStrip(el('prev-patterns'), presetCode[pi], t, a);
+      paintStrip(el('prev-advanced'), (typeof code !== 'undefined') ? code : null, t, a);
+
+      drawMeter(a);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- quick controls (UI only for now) ----
+  var switches = ['pwr', 'pwr-basic', 'pwr-pat', 'pwr-adv'];
+  switches.forEach(function (id) {                // keep every on/off switch in step
+    el(id).addEventListener('click', function () {
+      var on = el(id).getAttribute('aria-pressed') !== 'true';
+      switches.forEach(function (o) {
+        el(o).setAttribute('aria-pressed', on ? 'true' : 'false');
+        el(o).textContent = on ? 'Lights on' : 'Lights off';
+      });
+    });
+  });
+  var sliders = ['bri', 'home-bri', 'pat-bri', 'adv-bri'];
+  sliders.forEach(function (id) {                 // keep every brightness slider in step
+    el(id).addEventListener('input', function () {
+      var v = el(id).value;
+      sliders.forEach(function (o) { el(o).value = v; el(o + '-val').textContent = v + '%'; });
+    });
+  });
+})();
 </script>
 </body>
 </html>
