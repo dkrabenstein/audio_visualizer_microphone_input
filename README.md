@@ -41,13 +41,10 @@ bass bloom (tested)
 
 To do:
 decrease abrupt changes in color
-make brightness adjustable
-add white light
-add plain color
-mic sensitivity control
 explain setup
 High pass filter hardware?
 have default patterns stored on board
+Consider adding OTA so board doesn't need to be flashed by cable
 
 Split advanved configurations into two different tabs. The first tab should be titled custom. At the top is should say make your own pattern. The page should include the entire expr3ession card, the preview card, the brightness card, and the uplaod and refresh buttons. The other tab should be called setup. The top should say configure your lights. The page should include the esp32 connection and the microphone tunning. The microphone tunning should no longer be hidden. Add these new tabs to the home page.
 

@@ -99,6 +99,7 @@ button:disabled{opacity:.4;cursor:default}
 .now-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
 .now-name{font-size:16px;font-weight:600}
 .now-sub{font-size:12px;color:var(--dim)}
+.now-name:empty,.now-sub:empty{display:none}   /* no blank row (and no gap) when there is no text */
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
 .dot.on{background:var(--ok)} .dot.off{background:var(--err)}
 .navcard{display:flex;align-items:center;gap:14px}
@@ -111,6 +112,7 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
 @media (max-width:640px){.homegrid{grid-template-columns:1fr}}
 .briRow input[type=range]{flex:0 1 65%}
 .swbox{flex:1;display:flex;justify-content:center;align-items:center}
+details.fold:not([open])>summary{margin-bottom:0!important}
 </style>
 </head>
 <body>
@@ -179,14 +181,16 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
         <canvas id="meter" width="320" height="90"></canvas>
         <div class="meta" id="meter-src">connecting&hellip;</div>
       </div>
-      <div class="panel">
+      <div class="panel" style="display:flex;flex-direction:column">
         <label>quick controls</label>
-        <div class="row" style="justify-content:center">
-          <button class="switch" id="pwr" aria-pressed="true">Lights on</button>
-        </div>
-        <div class="rangeRow" style="margin-top:14px">
-          <input id="home-bri" type="range" min="0" max="100" value="100">
-          <span id="home-bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div class="row" style="justify-content:center">
+            <button class="switch" id="pwr" aria-pressed="true">Lights on</button>
+          </div>
+          <div class="rangeRow" style="margin-top:14px">
+            <input id="home-bri" type="range" min="0" max="100" value="100">
+            <span id="home-bri-val" style="min-width:42px;text-align:right">100%</span>
+          </div>
         </div>
       </div>
     </div>
@@ -334,11 +338,30 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
   <h1 style="margin-bottom:18px">CONFIGURE YOUR LIGHTS</h1>
 
   <div class="panel">
+    <label>LED strips</label>
+    <div class="meta" style="margin:0 0 12px">Set how many LEDs each strip lights, and which end is the start of a pattern.
+      By default the start is the LED nearest the controller; tick <b>start from the far end</b> to flip a strip
+      that is mounted the other way round. Changes apply live; press <b>Save to board</b> to keep them after a reboot.
+      Lowering a count turns the extra LEDs off.</div>
+    <details class="fold">
+      <summary style="cursor:pointer;margin-bottom:10px;font-size:12px;letter-spacing:.08em;color:var(--acc)">ADJUST</summary>
+    <div id="strip-rows"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="strip-save">Save to board</button>
+      <button id="strip-reset">Reset defaults</button>
+    </div>
+    <div id="strip-status" class="meta"></div>
+    </details>
+  </div>
+
+  <div class="panel">
     <label>microphone tuning</label>
-    <div id="tune-box">
-      <div class="meta" style="margin:8px 0 12px">Each band stays dark until it rises above its
+    <div class="meta" style="margin:0 0 12px">Each band stays dark until it rises above its
         <b>floor</b> plus the <b>margin</b>. Drag a floor to just above that band's "now" reading in a quiet room,
         or press <b>Calibrate</b> while the room is quiet. Changes apply live; press <b>Save to board</b> to keep them after a reboot.</div>
+    <details class="fold">
+      <summary style="cursor:pointer;margin-bottom:10px;font-size:12px;letter-spacing:.08em;color:var(--acc)">ADJUST</summary>
+    <div id="tune-box">
       <div id="tune-rows"></div>
       <div class="rangeRow" style="margin-top:10px">
         <span style="min-width:120px">margin</span>
@@ -357,6 +380,13 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
       </div>
       <div id="tune-status" class="meta"></div>
     </div>
+    </details>
+  </div>
+
+  <div class="panel">
+    <label>live sound</label>
+    <canvas id="setup-meter" width="640" height="130" style="height:130px"></canvas>
+    <div class="meta" id="setup-meter-src"></div>
   </div>
 
 </div>
@@ -794,7 +824,7 @@ build(); uploadPresets();
     try {
       audio = await getJson(base + '/api/audio');
       live = true;
-      el('meter-src').textContent = 'live from the lights';
+      el('meter-src').textContent = '';   // normal case: no subtitle (problems are still reported below)
     } catch (e) {
       live = false;
       var done = false;
@@ -837,12 +867,12 @@ build(); uploadPresets();
       name = 'Lights not reachable'; dot = 'off';
       sub = 'check that the board is powered and on your network';
     } else {
-      dot = 'on'; sub = 'click to change';
+      dot = 'on'; sub = '';
       var a = dev.active, n = presetIndex(a);
       if (n >= 0) name = title(PRESETS[n].name);
       else if (a === BASIC_SLOT) { name = 'Single colour'; go = 'basic'; }
       else if (a === ADVANCED_SLOT) { name = 'Custom formula'; go = 'custom'; }
-      else name = 'Default colours';
+      else name = '';
     }
     el('now-name').textContent = name;
     el('now-sub').textContent = sub;
@@ -1068,6 +1098,8 @@ build(); uploadPresets();
     if (busy) return;
     var tab = document.getElementById('tab-setup');
     if (tab && !tab.classList.contains('active')) return;
+    var fold = box.closest('details');
+    if (fold && !fold.open) return;     // collapsed
     busy = true;
     var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
     try {
@@ -1091,11 +1123,157 @@ build(); uploadPresets();
     busy = false;
   }
   setInterval(refresh, 400);
+  box.closest('details').addEventListener('toggle', function () { loaded = false; refresh(); });
   // Re-read the board's values whenever the Setup tab is opened.
   document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
     b.addEventListener('click', function () { loaded = false; setTimeout(refresh, 0); });
   });
   labels();
+})();
+</script>
+<script>
+// ---- LED strips (Setup tab) ----
+(function () {
+  var rowsBox = document.getElementById('strip-rows');
+  if (!rowsBox) return;
+  var N = 4, max = 300;
+  var cnt = [], rev = [], note = [];
+  for (var i = 0; i < N; i++) {
+    var r = document.createElement('div');
+    r.className = 'rangeRow';
+    r.style.marginBottom = '8px';
+    r.innerHTML = '<span style="min-width:70px">strip ' + i + '</span>' +
+      '<input type="number" min="1" max="300" step="1" value="100" aria-label="LEDs on strip ' + i + '" ' +
+      'style="width:88px;background:#0b0c10;border:1px solid var(--line);color:var(--fg);padding:6px 8px;border-radius:5px;font:inherit">' +
+      '<span style="color:var(--dim);font-size:12px;min-width:92px"></span>' +
+      '<label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:var(--fg);cursor:pointer">' +
+      '<input type="checkbox" style="accent-color:var(--acc)"> start from the far end</label>';
+    rowsBox.appendChild(r);
+    cnt.push(r.children[1]); note.push(r.children[2]); rev.push(r.children[3].querySelector('input'));
+  }
+  var status = document.getElementById('strip-status');
+  var lastEdit = 0, sending = false, pending = false, defaults = null;
+
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(m, bad) { status.textContent = m; status.style.color = bad ? 'var(--err)' : 'var(--dim)'; }
+
+  function fill(j) {
+    max = j.max || max; defaults = j.defaults;
+    for (var i = 0; i < N; i++) {
+      cnt[i].max = max;
+      cnt[i].value = j.counts[i];
+      rev[i].checked = !!j.reversed[i];
+      note[i].textContent = 'as built: ' + j.defaults[i];
+    }
+  }
+
+  async function push() {                       // latest value wins
+    if (sending) { pending = true; return; }
+    sending = true;
+    var body = { counts: cnt.map(function (e) { return parseInt(e.value, 10); }),
+                 reversed: rev.map(function (e) { return e.checked; }) };
+    try {
+      var r = await fetch(base() + '/api/strips', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.ok) say('applied (not saved yet)');
+      else { var j = {}; try { j = await r.json(); } catch (e) {} say(j.error || 'board rejected the change', true); }
+    } catch (e) { say('lights not reachable', true); }
+    sending = false;
+    if (pending) { pending = false; push(); }
+  }
+
+  function edited(input) {
+    lastEdit = Date.now();
+    if (input.type === 'number') {              // only send a sensible whole number
+      var v = Number(input.value);
+      if (!(v >= 1 && v <= max) || Math.floor(v) !== v) { say('enter a whole number from 1 to ' + max, true); return; }
+    }
+    push();
+  }
+  cnt.concat(rev).forEach(function (e) { e.addEventListener('change', function () { edited(e); }); });
+
+  async function post(path) { return fetch(base() + path, { method: 'POST' }); }
+  document.getElementById('strip-save').addEventListener('click', async function () {
+    try { var r = await post('/api/leds/save'); say(r.ok ? 'saved to the board' : 'save failed', !r.ok); }
+    catch (e) { say('lights not reachable', true); }
+  });
+  document.getElementById('strip-reset').addEventListener('click', async function () {
+    try { await post('/api/leds/reset'); lastEdit = 0; say('defaults restored'); refresh(); }
+    catch (e) { say('lights not reachable', true); }
+  });
+
+  var busy = false;
+  async function refresh() {
+    if (busy) return;
+    var tab = document.getElementById('tab-setup');
+    if (tab && !tab.classList.contains('active')) return;
+    var fold = rowsBox.closest('details');
+    if (fold && !fold.open) return;     // collapsed
+    if (Date.now() - lastEdit < 3000 || sending) return;     // don't overwrite what is being typed
+    busy = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var j = await (await fetch(base() + '/api/strips', { signal: ctl.signal })).json();
+      if (cnt.indexOf(document.activeElement) < 0) fill(j);   // not while a count is being typed
+    } catch (e) { /* offline: keep what is shown */ }
+    clearTimeout(to);
+    busy = false;
+  }
+  setInterval(refresh, 2000);
+  rowsBox.closest('details').addEventListener('toggle', function () { lastEdit = 0; refresh(); });
+  document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
+    b.addEventListener('click', function () { lastEdit = 0; setTimeout(refresh, 0); });
+  });
+  setTimeout(refresh, 500);
+})();
+</script>
+<script>
+// ---- live sound bars (Setup tab) ----
+// The same 0..1 band values the lights react to, so tuning changes show up here at once.
+(function () {
+  var cv = document.getElementById('setup-meter');
+  if (!cv) return;
+  var g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  var src = document.getElementById('setup-meter-src');
+  var shown = [0, 0, 0, 0, 0, 0, 0, 0], audio = null, live = false, fetching = false;
+
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function active() {
+    var tab = document.getElementById('tab-setup');
+    return !tab || tab.classList.contains('active');
+  }
+  async function fetchAudio() {
+    if (fetching || !active()) return;
+    fetching = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var r = await fetch(base() + '/api/audio', { signal: ctl.signal });
+      if (!r.ok) throw new Error(r.status);
+      audio = await r.json(); live = true; src.textContent = '';
+    } catch (e) { live = false; src.textContent = 'no signal — lights not reachable'; }
+    clearTimeout(to);
+    fetching = false;
+  }
+  setInterval(fetchAudio, 150);
+
+  function draw() {
+    if (active()) {
+      g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+      var n = 8, gap = 14, bw = (W - gap * (n + 1)) / n, top = 8, base0 = H - 22;
+      g.font = '12px ui-monospace, monospace'; g.textAlign = 'center';
+      for (var i = 0; i < n; i++) {
+        var target = (live && audio) ? Math.max(0, Math.min(1, audio.bands[i] || 0)) : 0;
+        shown[i] += (target - shown[i]) * (target > shown[i] ? 0.5 : 0.15);   // fast up, slow down
+        var h = shown[i] * (base0 - top), x = gap + i * (bw + gap);
+        g.fillStyle = (typeof fastledCss === 'function') ? fastledCss(i / 9) : '#60a5fa';
+        g.fillRect(x, base0 - h, bw, Math.max(2, h));
+        g.fillStyle = '#8b90a4';
+        g.fillText('band ' + i, x + bw / 2, H - 6);
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
 })();
 </script>
 </body>

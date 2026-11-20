@@ -17,6 +17,7 @@
 #include "pins.h"
 #include "expr_vm.h"
 #include "audio_source.h"
+#include "strip_config.h"
 
 // Audio source: on-board I2S mic by default. Build with -DAUDIO_USE_UDP to take
 // features from the PC's UDP stream instead (handy for testing without a mic).
@@ -95,19 +96,8 @@ struct __attribute__((packed)) AudioPayload {
 };
 
 // ---------------------------------------------------------------- LED Config
-#define NUM_STRIPS 4
-
-#define NUM_LED0  180
-#define NUM_LED1  100
-#define NUM_LED2  180
-#define NUM_LED3  101
-
-static const uint16_t STRIP_LENGTHS[NUM_STRIPS] = {
-    NUM_LED0,
-    NUM_LED1,
-    NUM_LED2,
-    NUM_LED3
-};
+// How many LEDs each strip drives, and which end is x=0, come from strip_config.h
+// (adjustable from the web UI). Each frame buffer is allocated at STRIP_MAX_LEDS.
 
 #define MAX_MILLIAMPS 6000
 
@@ -117,12 +107,17 @@ static const uint16_t STRIP_LENGTHS[NUM_STRIPS] = {
 // (MAX_MILLIAMPS above) still applies on top of this.
 #define MAX_BRIGHTNESS 160
 
-static DRAM_ATTR CRGB leds0[NUM_LED0];
-static DRAM_ATTR CRGB leds1[NUM_LED1];
-static DRAM_ATTR CRGB leds2[NUM_LED2];
-static DRAM_ATTR CRGB leds3[NUM_LED3];
+static DRAM_ATTR CRGB leds0[STRIP_MAX_LEDS];
+static DRAM_ATTR CRGB leds1[STRIP_MAX_LEDS];
+static DRAM_ATTR CRGB leds2[STRIP_MAX_LEDS];
+static DRAM_ATTR CRGB leds3[STRIP_MAX_LEDS];
 
 static CRGB* const stripBuffers[NUM_STRIPS] = { leds0, leds1, leds2, leds3 };
+
+// FastLED's controller for each strip, and how many LEDs it is currently sending.
+// Only the render task touches these after setup().
+static CLEDController* g_ctrl[NUM_STRIPS] = {};
+static uint16_t        g_outCount[NUM_STRIPS] = {};
 
 static volatile uint32_t g_frames = 0;
 static volatile float    g_fps = 0;
@@ -249,9 +244,11 @@ static void setupHttpRoutes() {
         d["brightness"] = g_brightnessPct;
         d["on"] = (bool)g_lightsOn;   // cast: ArduinoJson would serialise a volatile bool as 0/1
 
+        StripConfig sc;
+        strip_config_get(&sc);
         JsonArray stripLens = d["stripLengths"].to<JsonArray>();
         for (int i = 0; i < NUM_STRIPS; i++) {
-            stripLens.add(STRIP_LENGTHS[i]);
+            stripLens.add(sc.count[i]);
         }
 
         JsonArray a = d["slots"].to<JsonArray>();
@@ -386,6 +383,87 @@ static void setupHttpRoutes() {
         r->send(200, "application/json", "{\"ok\":true}");
     });
 
+    // GET /api/strips -- LED count and direction per strip, plus the limits and the as-built counts.
+    server.on("/api/strips", HTTP_GET, [](AsyncWebServerRequest *r) {
+        StripConfig c, def;
+        strip_config_get(&c);
+        strip_config_defaults(&def);
+        JsonDocument d;
+        JsonArray cnt = d["counts"].to<JsonArray>();
+        JsonArray rev = d["reversed"].to<JsonArray>();
+        JsonArray dfl = d["defaults"].to<JsonArray>();
+        for (int i = 0; i < NUM_STRIPS; i++) {
+            cnt.add(c.count[i]);
+            rev.add(c.reversed[i] != 0);
+            dfl.add(def.count[i]);
+        }
+        d["max"] = STRIP_MAX_LEDS;
+        String s;
+        serializeJson(d, s);
+        r->send(200, "application/json", s);
+    });
+
+    // POST /api/strips  JSON {counts:[4], reversed:[4]} -- either field optional.
+    // Applies live; not saved until POST /api/leds/save.
+    server.on("/api/strips", HTTP_POST,
+              [](AsyncWebServerRequest *r) {}, nullptr,
+              [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
+        static String buf;
+        if (index == 0) buf = "";
+        buf.concat((const char *)data, len);
+        if (index + len != total) return;
+
+        JsonDocument doc;
+        if (deserializeJson(doc, buf)) {
+            req->send(400, "application/json", "{\"error\":\"malformed JSON\"}");
+            return;
+        }
+        StripConfig c;
+        strip_config_get(&c);
+
+        JsonArray cnt = doc["counts"];
+        if (!cnt.isNull()) {
+            if (cnt.size() != NUM_STRIPS) {
+                req->send(400, "application/json", "{\"error\":\"counts needs 4 values\"}");
+                return;
+            }
+            for (int i = 0; i < NUM_STRIPS; i++) {
+                const int v = cnt[i] | -1;
+                if (v < 1 || v > STRIP_MAX_LEDS) {
+                    JsonDocument e;
+                    e["error"] = String("each count must be a whole number 1-") + STRIP_MAX_LEDS;
+                    String es;
+                    serializeJson(e, es);
+                    req->send(400, "application/json", es);
+                    return;
+                }
+                c.count[i] = (uint16_t)v;
+            }
+        }
+        JsonArray rev = doc["reversed"];
+        if (!rev.isNull()) {
+            if (rev.size() != NUM_STRIPS) {
+                req->send(400, "application/json", "{\"error\":\"reversed needs 4 values\"}");
+                return;
+            }
+            for (int i = 0; i < NUM_STRIPS; i++) c.reversed[i] = (rev[i] | false) ? 1 : 0;
+        }
+        strip_config_set(c);
+        req->send(200, "application/json", "{\"ok\":true}");
+    });
+
+    // POST /api/leds/save -- persist the strip settings to flash.
+    server.on("/api/leds/save", HTTP_POST, [](AsyncWebServerRequest *r) {
+        if (strip_config_save()) r->send(200, "application/json", "{\"ok\":true}");
+        else r->send(500, "application/json", "{\"error\":\"save failed\"}");
+    });
+
+    // POST /api/leds/reset -- back to the strips as built (also clears the saved copy).
+    server.on("/api/leds/reset", HTTP_POST, [](AsyncWebServerRequest *r) {
+        strip_config_reset();
+        r->send(200, "application/json", "{\"ok\":true}");
+    });
+
     server.begin();
 }
 
@@ -492,19 +570,35 @@ static void renderTask(void *) {
         c.mid   = af.mid;
         c.treb  = af.treb;
 
+        StripConfig sc;
+        strip_config_get(&sc);   // counts / direction can change from the web UI between frames
+
         for (int s = 0; s < NUM_STRIPS; s++) {
             c.idx = (float)s;
-            const uint16_t count = STRIP_LENGTHS[s];
+            const uint16_t count = sc.count[s];
             CRGB* strip = stripBuffers[s];
+
+            // Growing: start sending the extra LEDs this frame (they are rendered just below).
+            if (count > g_outCount[s]) {
+                g_ctrl[s]->setLeds(strip, count);
+                g_outCount[s] = count;
+            }
 
             const float invN = (count > 1) ? (1.0f / (float)(count - 1)) : 0.0f;
 
             for (uint16_t i = 0; i < count; i++) {
-                c.x = (float)i * invN;
+                // x runs 0..1 from the first LED, or from the last one when reversed.
+                c.x = (float)(sc.reversed[s] ? (count - 1 - i) : i) * invN;
                 const float v = expr_eval(prog, &c);
 
                 float h = v - floorf(v);
                 strip[i] = CHSV((uint8_t)(h * 255.0f), 240, 255);
+            }
+
+            // Shrinking: the LEDs past the new count are about to stop receiving data and
+            // would keep their last colour. Send them black once (this frame), then drop them.
+            if (g_outCount[s] > count) {
+                memset(strip + count, 0, (size_t)(g_outCount[s] - count) * sizeof(CRGB));
             }
         }
         g_evalUs = micros() - t0;
@@ -514,6 +608,14 @@ static void renderTask(void *) {
         const uint32_t pct = g_lightsOn ? g_brightnessPct : 0;
         FastLED.setBrightness((uint8_t)((pct * MAX_BRIGHTNESS + 50) / 100));
         FastLED.show();
+
+        // Now that the blacked-out tail has been sent, stop driving it.
+        for (int s = 0; s < NUM_STRIPS; s++) {
+            if (g_outCount[s] > sc.count[s]) {
+                g_ctrl[s]->setLeds(stripBuffers[s], sc.count[s]);
+                g_outCount[s] = sc.count[s];
+            }
+        }
 
         if (++frameCount >= 30) {
             const uint32_t now = millis();
@@ -559,10 +661,15 @@ void setup() {
     expr_validate(&defProg);
     ram_store_save(0, "audio_reactive", &defProg);
 
-    FastLED.addLeds<WS2812B, PIN_LED0, GRB>(leds0, NUM_LED0);
-    FastLED.addLeds<WS2812B, PIN_LED1, GRB>(leds1, NUM_LED1);
-    FastLED.addLeds<WS2812B, PIN_LED2, GRB>(leds2, NUM_LED2);
-    FastLED.addLeds<WS2812B, PIN_LED3, GRB>(leds3, NUM_LED3);
+    // Saved strip settings (LED counts), if any, must be known before the strips are created.
+    strip_config_load();
+    StripConfig sc;
+    strip_config_get(&sc);
+    g_ctrl[0] = &FastLED.addLeds<WS2812B, PIN_LED0, GRB>(leds0, sc.count[0]);
+    g_ctrl[1] = &FastLED.addLeds<WS2812B, PIN_LED1, GRB>(leds1, sc.count[1]);
+    g_ctrl[2] = &FastLED.addLeds<WS2812B, PIN_LED2, GRB>(leds2, sc.count[2]);
+    g_ctrl[3] = &FastLED.addLeds<WS2812B, PIN_LED3, GRB>(leds3, sc.count[3]);
+    for (int s = 0; s < NUM_STRIPS; s++) g_outCount[s] = sc.count[s];
     FastLED.setMaxPowerInVoltsAndMilliamps(5, MAX_MILLIAMPS);
     FastLED.setBrightness(160);
     FastLED.clear(true);
