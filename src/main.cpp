@@ -120,8 +120,48 @@ static CLEDController* g_ctrl[NUM_STRIPS] = {};
 static uint16_t        g_outCount[NUM_STRIPS] = {};
 
 static volatile uint32_t g_frames = 0;
+// Where the render task currently is, so a stall can be located (shown in /api/slots):
+// 1 = reading inputs / rendering, 2 = inside FastLED.show(), 3 = after show(), 4 = sleeping.
+static volatile uint8_t  g_renderStage = 0;
 static volatile float    g_fps = 0;
 static volatile uint32_t g_evalUs = 0;
+// ---------------------------------------------------------------- White light
+// WS2812B LEDs have no white chip: "white" is red + green + blue mixed, and the mix sets how
+// warm or cool it looks. The web UI's slider picks a colour temperature in kelvin; while one is
+// active the render task fills every strip with that colour and skips the pattern. Choosing a
+// pattern or a colour (POST /api/select) clears it.
+#define WHITE_MIN_K 2000   // deep warm (candle-like)
+#define WHITE_MAX_K 6500   // cool daylight
+static volatile uint16_t g_whiteK = 0;  // 0 = off, else colour temperature; set by POST /api/white
+
+// Colour temperature -> RGB (Tanner Helland's blackbody approximation).
+// Keep in step with whiteRGB() in data/www/presets.js and server/public/presets.js (the web
+// versions return screen values; this one additionally gamma-decodes for the LEDs, see below).
+static CRGB kelvinToRGB(uint16_t kelvin) {
+    const float t = (float)kelvin / 100.0f;
+    float r, g, b;
+    if (t <= 66.0f) {
+        r = 255.0f;
+        g = 99.4708025861f * logf(t) - 161.1195681661f;
+    } else {
+        r = 329.698727446f * powf(t - 60.0f, -0.1332047592f);
+        g = 288.1221695283f * powf(t - 60.0f, -0.0755148492f);
+    }
+    if (t >= 66.0f)      b = 255.0f;
+    else if (t <= 19.0f) b = 0.0f;
+    else                 b = 138.5177312231f * logf(t - 10.0f) - 305.0447927307f;
+    // The formula above gives screen (sRGB) values, which is what the web page's swatch shows.
+    // A monitor applies a ~2.2 gamma curve to those values, but WS2812B LEDs emit light in
+    // direct proportion to the value (linear PWM). Decode the gamma here so the LEDs give off
+    // the same ratio of red:green:blue light that the screen shows; otherwise green and blue
+    // come out too strong and the white looks cooler than the swatch.
+    auto to8 = [](float v) -> uint8_t {
+        v = v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v);
+        return (uint8_t)(255.0f * powf(v / 255.0f, 2.2f) + 0.5f);
+    };
+    return CRGB(to8(r), to8(g), to8(b));
+}
+
 static volatile uint8_t  g_brightnessPct = 100;   // set by POST /api/brightness
 static volatile bool     g_lightsOn = true;       // set by POST /api/power
 
@@ -228,7 +268,32 @@ static void setupHttpRoutes() {
             r->send(400, "application/json", "{\"error\":\"invalid slot index\"}");
             return;
         }
+        g_whiteK = 0;   // picking a pattern or colour ends any white light
         r->send(200, "application/json", "{\"ok\":true}");
+    });
+
+    // POST /api/white   kelvin=2000..6500 (or kelvin=off), form body or query string
+    server.on("/api/white", HTTP_POST, [](AsyncWebServerRequest *r) {
+        auto p = r->hasParam("kelvin", true) ? r->getParam("kelvin", true)
+               : (r->hasParam("kelvin", false) ? r->getParam("kelvin", false) : nullptr);
+        if (!p) {
+            r->send(400, "application/json", "{\"error\":\"missing kelvin parameter\"}");
+            return;
+        }
+        const String v = p->value();
+        if (v == "off") {
+            g_whiteK = 0;
+            r->send(200, "application/json", "{\"ok\":true,\"kelvin\":null}");
+            return;
+        }
+        const int k = v.toInt();
+        if (k < WHITE_MIN_K || k > WHITE_MAX_K || String(k) != v) {
+            r->send(400, "application/json",
+                    String("{\"error\":\"kelvin must be a whole number ") + WHITE_MIN_K + "-" + WHITE_MAX_K + " or off\"}");
+            return;
+        }
+        g_whiteK = (uint16_t)k;
+        r->send(200, "application/json", String("{\"ok\":true,\"kelvin\":") + k + "}");
     });
 
     // GET /api/slots
@@ -237,6 +302,17 @@ static void setupHttpRoutes() {
         d["active"] = ram_store_activeSlot();
         d["fps"] = g_fps;
         d["evalUs"] = g_evalUs;
+        d["frames"] = g_frames;        // advances every rendered frame; a stuck value means rendering stalled
+        d["stage"]  = g_renderStage;   // where the render task is: see g_renderStage
+        const uint16_t wk = g_whiteK;
+        if (wk) {
+            d["white"] = wk;   // active white light's colour temperature (K)
+            const CRGB w = kelvinToRGB(wk);
+            JsonArray rgb = d["whiteRgb"].to<JsonArray>();   // the exact colour being shown
+            rgb.add(w.r); rgb.add(w.g); rgb.add(w.b);
+        } else {
+            d["white"] = nullptr;
+        }
         AudioFeatures af;
         audio_source_get(&af);
         d["level"] = af.level;  // latest audio level; 0 = silence / no input
@@ -328,13 +404,14 @@ static void setupHttpRoutes() {
         for (int i = 0; i < 8; i++) { fl.add(t.floorDb[i]); rw.add(raw[i]); }
         d["margin"]  = t.marginDb;
         d["minCeil"] = t.minCeilDb;
+        d["smoothness"] = t.smoothness;
         d["calibrating"] = cal;
         String s;
         serializeJson(d, s);
         r->send(200, "application/json", s);
     });
 
-    // POST /api/tuning  JSON {floors:[8], margin, minCeil} -- any field optional.
+    // POST /api/tuning  JSON {floors:[8], margin, minCeil, smoothness} -- any field optional.
     // Applies live; not saved until POST /api/mic/save.
     server.on("/api/tuning", HTTP_POST,
               [](AsyncWebServerRequest *r) {}, nullptr,
@@ -361,6 +438,7 @@ static void setupHttpRoutes() {
         }
         t.marginDb  = doc["margin"]  | t.marginDb;
         t.minCeilDb = doc["minCeil"] | t.minCeilDb;
+        t.smoothness = doc["smoothness"] | t.smoothness;
         audio_tuning_set(t);   // clamps to safe ranges
         req->send(200, "application/json", "{\"ok\":true}");
     });
@@ -541,6 +619,25 @@ static void networkTask(void *) {
             f.treb  = packet.treb;
             audio_source_push_udp(f);  // ignored while the mic is the active source
         }
+
+        // Render watchdog (diagnostic): if the frame counter stops advancing, say where it is stuck.
+        static uint32_t wdFrames = 0, wdChangedMs = 0;
+        static bool wdWarned = false;
+        const uint32_t fr = g_frames, nowMs = millis();
+        if (fr != wdFrames) { wdFrames = fr; wdChangedMs = nowMs; wdWarned = false; }
+        else if (!wdWarned && nowMs - wdChangedMs > 3000) {
+            wdWarned = true;
+            Serial.printf("RENDER STALLED: stage=%u frames=%u\n", (unsigned)g_renderStage, (unsigned)fr);
+        }
+        // Self-heal: FastLED.show() can hang for good if the RMT "transmit done" interrupt is
+        // lost (seen with Wi-Fi active), and only a reset clears it, the same as replugging the
+        // board. Normal rendering advances the counter hundreds of times a second, so 3 s with
+        // no progress means the render task is stuck. Restart after a short grace period.
+        if (wdWarned && nowMs - wdChangedMs > 4000) {
+            Serial.println("Render task still stuck, restarting the board");
+            Serial.flush();
+            esp_restart();
+        }
         vTaskDelay(1);
     }
 }
@@ -553,6 +650,7 @@ static void renderTask(void *) {
     uint32_t frameCount = 0;
 
     for (;;) {
+        g_renderStage = 1;
         const uint32_t t0 = micros();
 
         // Latch the active program once per frame
@@ -572,6 +670,8 @@ static void renderTask(void *) {
 
         StripConfig sc;
         strip_config_get(&sc);   // counts / direction can change from the web UI between frames
+        const uint16_t whiteK = g_whiteK;    // read once so one frame is never half pattern, half white
+        const CRGB whiteRGB = whiteK ? kelvinToRGB(whiteK) : CRGB(0, 0, 0);
 
         for (int s = 0; s < NUM_STRIPS; s++) {
             c.idx = (float)s;
@@ -586,13 +686,17 @@ static void renderTask(void *) {
 
             const float invN = (count > 1) ? (1.0f / (float)(count - 1)) : 0.0f;
 
-            for (uint16_t i = 0; i < count; i++) {
-                // x runs 0..1 from the first LED, or from the last one when reversed.
-                c.x = (float)(sc.reversed[s] ? (count - 1 - i) : i) * invN;
-                const float v = expr_eval(prog, &c);
+            if (whiteK) {
+                fill_solid(strip, count, whiteRGB);   // white light: no pattern to evaluate
+            } else {
+                for (uint16_t i = 0; i < count; i++) {
+                    // x runs 0..1 from the first LED, or from the last one when reversed.
+                    c.x = (float)(sc.reversed[s] ? (count - 1 - i) : i) * invN;
+                    const float v = expr_eval(prog, &c);
 
-                float h = v - floorf(v);
-                strip[i] = CHSV((uint8_t)(h * 255.0f), 240, 255);
+                    float h = v - floorf(v);
+                    strip[i] = CHSV((uint8_t)(h * 255.0f), 240, 255);
+                }
             }
 
             // Shrinking: the LEDs past the new count are about to stop receiving data and
@@ -607,7 +711,9 @@ static void renderTask(void *) {
         // "Off" is brightness 0 (all LEDs black); the chosen percentage is kept for when it is back on.
         const uint32_t pct = g_lightsOn ? g_brightnessPct : 0;
         FastLED.setBrightness((uint8_t)((pct * MAX_BRIGHTNESS + 50) / 100));
+        g_renderStage = 2;
         FastLED.show();
+        g_renderStage = 3;
 
         // Now that the blacked-out tail has been sent, stop driving it.
         for (int s = 0; s < NUM_STRIPS; s++) {
@@ -624,6 +730,7 @@ static void renderTask(void *) {
             frameCount = 0;
         }
         g_frames++;
+        g_renderStage = 4;
         vTaskDelay(1);
     }
 }

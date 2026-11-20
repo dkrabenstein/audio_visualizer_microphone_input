@@ -33,6 +33,7 @@ struct AudioTuning {
     float floorDb[8];   // per-band noise floor table (the primary setting)
     float marginDb;     // extra dB above the floor before a band starts to show
     float minCeilDb;    // the "loud" end never drops below this
+    float smoothness;   // 0..100: 0 = snappy (jittery), 100 = smooth (slower to react)
 };
 
 void audio_tuning_defaults(AudioTuning *out);

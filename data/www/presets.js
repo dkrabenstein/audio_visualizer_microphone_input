@@ -1,6 +1,6 @@
-// presets.js -- the built-in microphone patterns, uploaded to slots 1-6
-// whenever the page loads (slot 0 is the firmware's own default:
-// 0.3*x + 0.03*t + bass + 1.5*level).
+// presets.js -- the built-in microphone patterns, uploaded to slots 0-6
+// whenever the page loads. Slot 0 is 'audio_reactive', the firmware's own default
+// (same formula as in src/main.cpp), so re-sending it changes nothing.
 //
 // These are the tested equations from README.md.
 //
@@ -15,6 +15,12 @@
 // Keep this file identical in data/www/ and server/public/.
 
 const PRESETS = [
+  {
+    // The firmware's default: a slowly drifting rainbow along each strip whose colours
+    // swing with the music (bass shifts the hue, overall loudness shifts it further).
+    name: 'audio_reactive',
+    expr: '0.3*x + 0.03*t + bass + 1.5*level'
+  },
   {
     // Spectral centroid: bass-heavy sound is red, treble-heavy sound moves
     // around the wheel. One colour for the whole strip.
@@ -53,9 +59,30 @@ const PRESETS = [
   }
 ];
 
-// The six presets occupy slots 1..6 (slot 0 is the firmware default).
-// The Advanced tab always uploads to, and runs from, slot 7 -- it has no slot picker.
-const PRESET_FIRST_SLOT = 1;
+// The seven presets occupy slots 0..6 (slot 0 = the firmware default, re-sent as-is).
+// The Custom tab always uploads to, and runs from, slot 7 -- it has no slot picker.
+const PRESET_FIRST_SLOT = 0;
 const ADVANCED_SLOT = 7;
 // The Basic tab (single colour) uploads to, and runs from, slot 8.
 const BASIC_SLOT = 8;
+
+// White light (Basic tab). The LEDs have no white chip, so a white is a red/green/blue mix
+// chosen by colour temperature (Tanner Helland's blackbody approximation). Keep whiteRGB() in
+// step with kelvinToRGB() in src/main.cpp, so the page previews exactly what the lights show.
+const WHITE_MIN_K = 2000;   // deep warm (candle-like)
+const WHITE_MAX_K = 6500;   // cool daylight
+function whiteRGB(kelvin) {
+  const t = Math.min(WHITE_MAX_K, Math.max(WHITE_MIN_K, kelvin)) / 100;
+  let r, g, b;
+  if (t <= 66) { r = 255; g = 99.4708025861 * Math.log(t) - 161.1195681661; }
+  else { r = 329.698727446 * Math.pow(t - 60, -0.1332047592); g = 288.1221695283 * Math.pow(t - 60, -0.0755148492); }
+  if (t >= 66) b = 255; else if (t <= 19) b = 0; else b = 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+  // Display only (the firmware is unchanged): from 4500 K up, ease red and green down so the cool
+  // end of the swatch and slider track gets progressively bluer, closer to how the lights look.
+  let f = Math.min(1, Math.max(0, (t * 100 - 4500) / (WHITE_MAX_K - 4500)));
+  f = f * f * (3 - 2 * f);
+  r *= 1 - 0.55 * f; g *= 1 - 0.25 * f;
+  const c = (v) => Math.round(Math.min(255, Math.max(0, v)));
+  return [c(r), c(g), c(b)];
+}
+function whiteName(kelvin) { return kelvin < 3500 ? 'Warm white' : (kelvin < 5000 ? 'White' : 'Cool white'); }

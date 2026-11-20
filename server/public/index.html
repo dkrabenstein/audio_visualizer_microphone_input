@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pattern Compiler (Node.js PC Host)</title>
 <style>
-:root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#8b90a4;
+:root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#a9aec2;
       --ok:#4ade80;--err:#f87171;--acc:#60a5fa}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
+body{margin:0;background:var(--bg);background:linear-gradient(180deg,#0a1428 0%,#101322 45%,#121317 100%) fixed;min-height:100vh;color:var(--fg);
      font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
 .wrap{max-width:860px;margin:0 auto;padding:20px}
-h1{font-size:16px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
-.sub{color:var(--dim);font-size:12px;margin-bottom:18px}
+h1{font-size:19px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
+.sub{color:var(--dim);font-size:14px;margin-bottom:18px}
 .panel{background:var(--panel);border:1px solid var(--line);
        border-radius:8px;padding:14px;margin-bottom:14px}
-label{display:block;font-size:11px;text-transform:uppercase;
-      letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
+label{display:block;font-size:15px;text-transform:uppercase;
+      letter-spacing:.08em;color:var(--acc);margin-bottom:6px}
 input[type=text]{width:100%;background:#0b0c10;border:1px solid var(--line);
       color:var(--fg);padding:10px;border-radius:5px;font:inherit}
 input[type=text]:focus{outline:none;border-color:var(--acc)}
@@ -33,10 +33,10 @@ select{background:#0b0c10;border:1px solid var(--line);color:var(--fg);
        padding:8px;border-radius:5px;font:inherit}
 .ex{color:var(--acc);cursor:pointer;text-decoration:underline dotted;
     font-size:12px;margin-right:12px;display:inline-block;margin-top:4px}
-.meta{font-size:11px;color:var(--dim);margin-top:8px}
+.meta{font-size:13px;color:var(--dim);margin-top:8px}
 /* --- tabs --- */
 .tabbar{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:0}
-.tabbar button{border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
+.tabbar button{font-size:15px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
        background:none;color:var(--dim);padding:8px 16px;margin-bottom:-1px}
 .tabbar button:hover{color:var(--fg);border-color:var(--line)}
 .tabbar button.active{background:var(--panel);color:var(--fg);border-color:var(--line);
@@ -47,23 +47,25 @@ select{background:#0b0c10;border:1px solid var(--line);color:var(--fg);
 .home ol{margin:0;padding-left:20px}
 .home li{margin-bottom:6px}
 .home .lead{font-size:15px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.cards{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}   /* a short last row (the 7th card) is centred */
+.cards .card{flex:0 1 calc((100% - 28px) / 3);min-width:250px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
       padding:10px;cursor:pointer;transition:border-color .15s}
 .card:hover{border-color:var(--acc)}
 .card.active{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
 .card canvas{height:64px;margin-bottom:8px}
-.card .title{font-weight:600;font-size:13px;margin-bottom:2px}
-.card .blurb{font-size:12px;color:var(--dim)}
+.card .title{font-weight:600;font-size:13px;margin-bottom:2px;color:var(--acc)}
+.card .blurb{font-size:14px;color:var(--dim)}
 #pat-status{font-size:12px;min-height:18px;margin-bottom:10px}
 #pat-status.ok{color:var(--ok)} #pat-status.err{color:var(--err)}
 #target{font-size:13px}
 #target.ok{color:var(--ok)}
 details.manual{margin-top:10px}
-details.manual summary{cursor:pointer;color:var(--dim);font-size:12px}
+details.manual summary{cursor:pointer;color:var(--dim);font-size:14px;text-transform:uppercase}
+details.manual[open]>summary{margin-bottom:10px}
 details.manual summary:hover{color:var(--fg)}
 details.opts{margin-top:12px}
-details.opts summary{cursor:pointer;color:var(--dim);font-size:12px}
+details.opts summary{cursor:pointer;color:var(--dim);font-size:13px}
 details.opts summary:hover{color:var(--fg)}
 .opt{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;
      font-size:12px;margin-top:10px}
@@ -85,25 +87,24 @@ details.opts summary:hover{color:var(--fg)}
 .rangeRow input[type=range]{flex:1;accent-color:var(--acc)}
 button:disabled{opacity:.4;cursor:default}
 .welcome{margin:22px 0 30px}
-.welcome-title{font-size:22px;font-weight:600;line-height:1.3;margin-bottom:8px}
-.welcome-text{font-size:15px;color:var(--dim)}
-.start-title{font-size:13px;font-weight:600;margin-bottom:12px}
+.welcome-title{font-size:24px;font-weight:600;line-height:1.3;margin-bottom:8px}
+.welcome-text{font-size:16px;color:var(--dim)}
+.start-title{font-size:16px;font-weight:600;margin-bottom:12px}
 .navcards{display:flex;flex-direction:column;gap:10px}
 .navcard{display:block;width:100%;text-align:left;padding:14px 16px;border-radius:8px;
          background:var(--panel);border:1px solid var(--line);color:var(--fg);cursor:pointer}
 .navcard:hover,.navcard:focus-visible{border-color:var(--acc);outline:none}
-.navcard .nc-title{display:block;font-weight:600;font-size:14px;margin-bottom:2px;color:var(--acc)}
-.navcard .nc-desc{display:block;font-size:12px;color:var(--dim)}
+.navcard .nc-title{display:block;font-weight:600;font-size:16px;margin-bottom:2px;color:var(--acc)}
+.navcard .nc-desc{display:block;font-size:14px;color:var(--dim)}
 #home-bar{height:8px;border-radius:4px;margin:6px 0 0}
-.greeting{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
 .nowcard{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
          padding:12px;margin-bottom:26px;border-radius:8px;background:var(--panel);
          border:1px solid var(--line);color:var(--fg);cursor:pointer}
 .nowcard:hover,.nowcard:focus-visible{border-color:var(--acc);outline:none}
 .nowcard canvas{width:100%;height:40px}
-.now-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.now-label{font-size:13px;color:var(--ok)}   /* same lettering and green as the status messages (e.g. patterns loaded) */
 .now-name{font-size:16px;font-weight:600}
-.now-sub{font-size:12px;color:var(--dim)}
+.now-sub{font-size:13px;color:var(--dim)}
 .now-name:empty,.now-sub:empty{display:none}   /* no blank row (and no gap) when there is no text */
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
 .dot.on{background:var(--ok)} .dot.off{background:var(--err)}
@@ -115,9 +116,51 @@ button:disabled{opacity:.4;cursor:default}
 #meter{height:90px}
 button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-color:var(--acc);font-weight:600}
 @media (max-width:640px){.homegrid{grid-template-columns:1fr}}
-.briRow input[type=range]{flex:0 1 65%}
+.briRow input[type=range]{flex:0 1 70%}
 .swbox{flex:1;display:flex;justify-content:center;align-items:center}
 details.fold:not([open])>summary{margin-bottom:0!important}
+.tempslider{-webkit-appearance:none;appearance:none;height:9px;border-radius:4.5px;outline:none;cursor:pointer}
+.tempslider::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--acc);box-shadow:0 0 0 1px #000}
+.tempslider::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--acc)}
+#white-temp{flex:0 1 calc(80% - 56px)}   /* same length as the brightness slider's right end */
+.tempslider.off::-webkit-slider-thumb{border-color:var(--dim);opacity:.75}
+.tempslider.off::-moz-range-thumb{border-color:var(--dim);opacity:.75}
+/* Slider cards (white, brightness): extra room below the slider row so the row, and with it the
+   colour square / Lights on button, sits at the vertical middle of the card. The extra space
+   equals the label's height + margin above the row (the white card already has 8px below it). */
+.panel:has(.swbox){padding-bottom:46px}
+.panel:has(#white-temp){padding-bottom:38px}
+#white-swatch{display:inline-block;width:36px;height:36px;border-radius:6px;border:1px solid var(--line);background:#222;flex:none}
+#white-readout{font-size:14px}
+/* Home page: live sound / quick controls cards */
+#tab-home .homegrid label{font-size:17px}
+#pwr{font-size:15px}
+#home-bri-val{font-size:15px}
+/* All tabs: match the Home page look (label, button, title and status sizes) */
+.tab label{font-size:17px}
+.tab .panel button{font-size:15px}
+#bri-val,#pat-bri-val,#adv-bri-val,#tune-margin-val,#tune-ceil-val,#tune-smooth-val{font-size:15px}
+/* "ADJUST" toggles: same look as the "manual override" toggle (14px, dim, brightens on hover) */
+details.fold>summary{font-size:14px!important;color:var(--dim)!important;letter-spacing:normal!important}
+details.fold>summary:hover{color:var(--fg)!important}
+#tune-box details.fold{margin-bottom:10px}
+#tune-box details.fold>summary{text-transform:uppercase}
+/* Line above each dropdown: brighter, a size up, with a blue bar on its left edge.
+   Note inside each dropdown: dim italic tip. (14px minimum on this tab, so only 1px apart.) */
+#tune-box>.meta:not(#tune-status){color:var(--fg);font-size:15px;border-left:3px solid var(--acc);padding-left:10px}
+#tune-box details>.meta{font-style:italic}
+.card .title{font-size:16px}
+#tab-basic .sub,#tab-patterns .sub{font-size:15px}
+#status,#pat-status,#basic-status,#target,.opt,.ex{font-size:13px}
+#basic-status{font-size:15px}
+/* Setup tab: nothing smaller than 14px (the attribute rule catches the 12px inline styles that the
+   page's script writes into the tuning and strip rows) */
+#tab-setup .meta{font-size:14px}
+#tab-setup :not(summary)[style*="font-size:12px"]{font-size:14px!important}
+#tab-setup #tune-box .rangeRow>span:first-child{min-width:170px!important}   /* room for "band 4 750 Hz–1.4k" at 14px */
+#tab-setup #target{font-size:14px}
+/* Custom tab: nothing smaller than 14px */
+#tab-custom #status,#tab-custom .ex,#tab-custom details.opts summary,#tab-custom .opt,#tab-custom .opt .h{font-size:14px}
 </style>
 </head>
 <body>
@@ -137,7 +180,6 @@ details.fold:not([open])>summary{margin-bottom:0!important}
     <canvas id="home-bar" width="600" height="8"></canvas>
 
     <div class="welcome">
-      <div class="greeting" id="greeting"></div>
       <div class="welcome-title">Welcome to your home lighting display!</div>
       <div class="welcome-text">You can adjust the lights to fit whatever you're feeling right now</div>
     </div>
@@ -161,7 +203,7 @@ details.fold:not([open])>summary{margin-bottom:0!important}
       <button class="navcard" data-go="patterns">
         <span class="nc-text">
           <span class="nc-title">Patterns</span>
-          <span class="nc-desc">Pick one of six lighting patterns that move with the music around you.</span>
+          <span class="nc-desc">Pick one of seven lighting patterns that move with the music around you.</span>
         </span>
         <canvas id="prev-patterns" width="120" height="36"></canvas>
       </button>
@@ -175,7 +217,7 @@ details.fold:not([open])>summary{margin-bottom:0!important}
       <button class="navcard" data-go="setup">
         <span class="nc-text">
           <span class="nc-title">Setup</span>
-          <span class="nc-desc">Configure your lights: connect to the board and tune the microphone.</span>
+          <span class="nc-desc">Connect to your board, configure your lights and tune your microphone</span>
         </span>
       </button>
     </div>
@@ -219,12 +261,14 @@ details.fold:not([open])>summary{margin-bottom:0!important}
 
     <div class="panel">
       <label>white</label>
-      <div class="row">
-        <button id="white-warm" disabled title="needs a firmware update">Warm white</button>
-        <button id="white-neutral" disabled title="needs a firmware update">White</button>
-        <button id="white-cool" disabled title="needs a firmware update">Cool white</button>
-        <span class="meta" style="margin:0">not available yet &mdash; the lights currently can't make white</span>
+      <div class="rangeRow">
+        <span style="min-width:44px;font-size:15px">warm</span>
+        <input id="white-temp" class="tempslider" type="range" min="2000" max="6500" step="100" value="2700" aria-label="White warmth">
+        <span style="min-width:44px;text-align:right;font-size:15px">cool</span>
+        <span class="swbox"><span id="white-swatch"></span></span>
+        <span id="white-readout" style="display:none"></span>
       </div>
+      <div id="white-status" class="meta"></div>
     </div>
 
     <div class="panel">
@@ -244,10 +288,7 @@ details.fold:not([open])>summary{margin-bottom:0!important}
   <div class="wrap">
     <h1>PATTERNS</h1>
     <div class="sub">pick a lighting pattern &middot; images show a sample moment of music</div>
-    <div id="pat-status"></div>
-    <div class="cards" id="cards"></div>
-
-    <div class="panel" style="margin-top:14px">
+    <div class="panel">
       <label>brightness</label>
       <div class="rangeRow briRow">
         <input id="pat-bri" type="range" min="0" max="100" value="100">
@@ -257,6 +298,9 @@ details.fold:not([open])>summary{margin-bottom:0!important}
         </div>
       </div>
     </div>
+
+    <div id="pat-status"></div>
+    <div class="cards" id="cards"></div>
   </div>
 </div>
 
@@ -314,6 +358,10 @@ details.fold:not([open])>summary{margin-bottom:0!important}
   <div class="panel">
     <label>preview</label>
     <canvas id="cv" width="600" height="70"></canvas>
+    <div class="row" style="margin-top:12px;justify-content:center">
+      <button class="primary" id="send">Upload &amp; activate</button>
+      <button id="refresh">Refresh Device</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -326,13 +374,6 @@ details.fold:not([open])>summary{margin-bottom:0!important}
         </div>
       </div>
     </div>
-
-  <div class="panel">
-    <div class="row">
-      <button class="primary" id="send">Upload &amp; activate</button>
-      <button id="refresh">Refresh Device</button>
-    </div>
-  </div>
 
 </div>
 
@@ -359,40 +400,57 @@ details.fold:not([open])>summary{margin-bottom:0!important}
 
   <div class="panel">
     <label>LED strips</label>
-    <div class="meta" style="margin:0 0 12px">Set how many LEDs each strip lights, and which end is the start of a pattern.
-      By default the start is the LED nearest the controller; tick <b>start from the far end</b> to flip a strip
-      that is mounted the other way round. Changes apply live; press <b>Save to board</b> to keep them after a reboot.
-      Lowering a count turns the extra LEDs off.</div>
+    <div class="meta" style="margin:0 0 12px">Set how many LEDs each strip lights, and which end is the start of a pattern.</div>
     <details class="fold">
       <summary style="cursor:pointer;margin-bottom:10px;font-size:12px;letter-spacing:.08em;color:var(--acc)">ADJUST</summary>
     <div id="strip-rows"></div>
+    </details>
     <div class="row" style="margin-top:12px">
       <button class="primary" id="strip-save">Save to board</button>
       <button id="strip-reset">Reset defaults</button>
     </div>
     <div id="strip-status" class="meta"></div>
-    </details>
   </div>
 
   <div class="panel">
     <label>microphone tuning</label>
-    <div class="meta" style="margin:0 0 12px">Each band stays dark until it rises above its
-        <b>floor</b> plus the <b>margin</b>. Drag a floor to just above that band's "now" reading in a quiet room,
-        or press <b>Calibrate</b> while the room is quiet. Changes apply live; press <b>Save to board</b> to keep them after a reboot.</div>
-    <details class="fold">
-      <summary style="cursor:pointer;margin-bottom:10px;font-size:12px;letter-spacing:.08em;color:var(--acc)">ADJUST</summary>
     <div id="tune-box">
-      <div id="tune-rows"></div>
-      <div class="rangeRow" style="margin-top:10px">
-        <span style="min-width:120px">margin</span>
-        <input id="tune-margin" type="range" min="0" max="15" step="0.5" value="5">
-        <span id="tune-margin-val" style="min-width:64px;text-align:right">5 dB</span>
-      </div>
-      <div class="rangeRow">
-        <span style="min-width:120px">loudest at least</span>
-        <input id="tune-ceil" type="range" min="-80" max="-30" step="1" value="-55">
-        <span id="tune-ceil-val" style="min-width:64px;text-align:right">-55 dB</span>
-      </div>
+      <div class="meta" style="margin:0 0 6px">Adjust the sensitivity of each frequency band by changing the noise floor.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">individual bands</summary>
+        <div class="meta" style="margin:0 0 10px">The noise floor is volume above which sound is registered. Drag a floor to just above that band's "now" reading in a quiet room, or press Calibrate for automatic adjustment.</div>
+        <div id="tune-rows"></div>
+      </details>
+      <div class="meta" style="margin:0 0 6px">Add an additional margin to the per band noise floors.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">margin</summary>
+        <div class="meta" style="margin:0 0 10px">Raise it if the lights flicker in silence, and lower it if they miss quiet sounds.</div>
+        <div class="rangeRow">
+          <span style="min-width:120px">margin</span>
+          <input id="tune-margin" type="range" min="0" max="15" step="0.5" value="5">
+          <span id="tune-margin-val" style="min-width:64px;text-align:right">5 dB</span>
+        </div>
+      </details>
+      <div class="meta" style="margin:0 0 6px">Set how loud a band must get to reach full strength.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">loudest at least</summary>
+        <div class="meta" style="margin:0 0 10px">If the lights flash to full on quiet noise between songs, raise it. If the lights never reach full brightness even on loud music, lower it.</div>
+        <div class="rangeRow">
+          <span style="min-width:120px">loudest at least</span>
+          <input id="tune-ceil" type="range" min="-80" max="-30" step="1" value="-55">
+          <span id="tune-ceil-val" style="min-width:64px;text-align:right">-55 dB</span>
+        </div>
+      </details>
+      <div class="meta" style="margin:0 0 6px">Choose how quickly the lights follow changes in the sound.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">smoothness</summary>
+        <div class="meta" style="margin:0 0 10px">Low values react instantly, high values give calmer colour changes.</div>
+        <div class="rangeRow">
+          <span style="min-width:120px">smoothness</span>
+          <input id="tune-smooth" type="range" min="0" max="100" step="1" value="40">
+          <span id="tune-smooth-val" style="min-width:64px;text-align:right">40%</span>
+        </div>
+      </details>
       <div class="row" style="margin-top:12px">
         <button id="tune-cal">Calibrate (quiet room)</button>
         <button class="primary" id="tune-save">Save to board</button>
@@ -400,7 +458,6 @@ details.fold:not([open])>summary{margin-bottom:0!important}
       </div>
       <div id="tune-status" class="meta"></div>
     </div>
-    </details>
   </div>
 
   <div class="panel">
@@ -585,10 +642,11 @@ async function poll() {
   try {
     const j = await (await fetch(espUrl() + '/api/slots')).json();
     document.dispatchEvent(new CustomEvent('devstate', { detail: j }));
-    // Presets live in the board's RAM, so a reboot or reflash empties them. If the first preset
-    // slot is unused, send them again. The cooldown stops a failing upload from re-triggering
-    // itself through the poll() at the end of uploadPresets().
-    const first = (j.slots || []).find(s => s.i === PRESET_FIRST_SLOT);
+    // Presets live in the board's RAM, so a reboot or reflash empties them. If the last preset
+    // slot is unused, send them again (slot 0 always holds the firmware default, so it can't be
+    // the test). The cooldown stops a failing upload from re-triggering itself through the
+    // poll() at the end of uploadPresets().
+    const first = (j.slots || []).find(s => s.i === PRESET_FIRST_SLOT + PRESETS.length - 1);
     if (first && !first.used && Date.now() - presetHealAt > 10000) {
       presetHealAt = Date.now();
       uploadPresets();
@@ -666,8 +724,10 @@ build();
 <script>
 // --- patterns tab -----------------------------------------------------------
 (function () {
-  // Friendly text for the six presets (keyed by preset name in presets.js).
+  // Friendly text for the presets (keyed by preset name in presets.js).
   var INFO = {
+    audio_reactive: ['Audio Reactive',
+      'The default pattern: a slowly drifting rainbow along the strip whose colours swing with the music. Bass and overall loudness both shift the colours.'],
     dominant_frequency: ['Dominant Frequency',
       'One colour for the whole strip that follows the pitch: deep sounds are red, high sounds move round the colour wheel.'],
     spectrum_hue_shift: ['Spectrum Hue Shift',
@@ -881,15 +941,6 @@ build();
   var home = el('tab-home');
   var isHome = function () { return home.classList.contains('active') && !document.hidden; };
 
-  // Greeting from the viewer's local time.
-  (function () {
-    var h = new Date().getHours();
-    el('greeting').textContent =
-      h >= 5 && h < 12 ? 'Good morning' :
-      h >= 12 && h < 17 ? 'Good afternoon' :
-      h >= 17 && h < 22 ? 'Good evening' : 'Hello';
-  })();
-
   function title(name) {
     return name.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
@@ -948,10 +999,10 @@ build();
   setInterval(fetchAudio, 150);
 
   // ---- device state (running pattern, online or not) ----
-  var dev = { online: null, active: null };
+  var dev = { online: null, active: null, white: null };
   var polling = false;
   document.addEventListener('devstate', function (e) {
-    dev.online = true; dev.active = e.detail.active; renderNow();
+    dev.online = true; dev.active = e.detail.active; dev.white = e.detail.white || null; renderNow();
   });
   document.addEventListener('devoffline', function () { dev.online = false; renderNow(); });
   setInterval(function () {
@@ -975,7 +1026,8 @@ build();
     } else {
       dot = 'on'; sub = '';
       var a = dev.active, n = presetIndex(a);
-      if (n >= 0) name = title(PRESETS[n].name);
+      if (dev.white) { name = whiteName(dev.white) + ' (' + dev.white + ' K)'; go = 'basic'; }
+      else if (n >= 0) name = title(PRESETS[n].name);
       else if (a === BASIC_SLOT) { name = 'Single colour'; go = 'basic'; }
       else if (a === ADVANCED_SLOT) { name = 'Custom formula'; go = 'custom'; }
       else name = '';
@@ -998,6 +1050,11 @@ build();
       g.fillStyle = fastledCss(evalCode(c, ctx));
       g.fillRect(p * w, 0, w + 1, cv.height);
     }
+  }
+  function paintSolidRGB(cv, c) {
+    var g = cv.getContext('2d');
+    g.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    g.fillRect(0, 0, cv.width, cv.height);
   }
   function paintSolid(cv, h) {
     var g = cv.getContext('2d'), c = rainbowRGB(h);
@@ -1030,7 +1087,7 @@ build();
     var a = dev.active, n = presetIndex(a);
     if (n >= 0) return presetCode[n];
     if (a === ADVANCED_SLOT) return (typeof code !== 'undefined') ? code : null;
-    if (a === BASIC_SLOT) return null;            // drawn as a solid colour
+    if (a === BASIC_SLOT || dev.white) return null;   // drawn as a solid colour
     return defaultCode;
   }
 
@@ -1042,7 +1099,8 @@ build();
       drawBar(t);
 
       var strip = el('now-strip'), hue = window.basicHue;
-      if (dev.online && dev.active === BASIC_SLOT && typeof hue === 'number') paintSolid(strip, hue);
+      if (dev.online && dev.white) paintSolidRGB(strip, whiteRGB(dev.white));
+      else if (dev.online && dev.active === BASIC_SLOT && typeof hue === 'number') paintSolid(strip, hue);
       else paintStrip(strip, nowCode(), t, a);
 
       var sw = el('prev-basic');
@@ -1152,14 +1210,14 @@ build();
   for (var i = 0; i < 8; i++) {
     var r = document.createElement('div');
     r.className = 'rangeRow';
-    r.innerHTML = '<span style="min-width:120px">band ' + i + ' <span style="color:var(--dim);font-size:11px">' +
+    r.innerHTML = '<span style="min-width:120px">band ' + i + ' <span style="color:var(--dim);font-size:12px">' +
       NAMES[i] + '</span></span><input type="range" min="-110" max="-40" step="0.5" value="-80">' +
       '<span style="min-width:64px;text-align:right"></span><span style="min-width:84px;text-align:right;font-size:12px"></span>';
     rows.appendChild(r);
     fl.push(r.children[1]); valEl.push(r.children[2]); nowEl.push(r.children[3]);
   }
   var margin = document.getElementById('tune-margin'), ceil = document.getElementById('tune-ceil'),
-      status = document.getElementById('tune-status');
+      smooth = document.getElementById('tune-smooth'), status = document.getElementById('tune-status');
   var lastEdit = 0, sending = false, pending = false, loaded = false;
   function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
   function say(m, bad) { status.textContent = m; status.style.color = bad ? 'var(--err)' : 'var(--dim)'; }
@@ -1167,12 +1225,13 @@ build();
     for (var i = 0; i < 8; i++) valEl[i].textContent = (+fl[i].value).toFixed(1) + ' dB';
     document.getElementById('tune-margin-val').textContent = margin.value + ' dB';
     document.getElementById('tune-ceil-val').textContent = ceil.value + ' dB';
+    document.getElementById('tune-smooth-val').textContent = smooth.value + '%';
   }
   async function push() {                       // latest value wins
     if (sending) { pending = true; return; }
     sending = true;
     var body = { floors: fl.map(function (s) { return +s.value; }),
-                 margin: +margin.value, minCeil: +ceil.value };
+                 margin: +margin.value, minCeil: +ceil.value, smoothness: +smooth.value };
     try {
       var r = await fetch(base() + '/api/tuning', { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -1183,7 +1242,7 @@ build();
   }
   var timer = null;
   function edited() { lastEdit = Date.now(); labels(); clearTimeout(timer); timer = setTimeout(push, 120); }
-  fl.concat([margin, ceil]).forEach(function (s) { s.addEventListener('input', edited); });
+  fl.concat([margin, ceil, smooth]).forEach(function (s) { s.addEventListener('input', edited); });
 
   async function post(path) { return fetch(base() + path, { method: 'POST' }); }
   document.getElementById('tune-cal').addEventListener('click', async function () {
@@ -1213,7 +1272,7 @@ build();
       var editing = Date.now() - lastEdit < 2000;
       if ((!editing && !j.calibrating) || !loaded) {
         for (var i = 0; i < 8; i++) fl[i].value = j.floors[i];
-        margin.value = j.margin; ceil.value = j.minCeil;
+        margin.value = j.margin; ceil.value = j.minCeil; smooth.value = j.smoothness;
         labels();
         loaded = !j.calibrating;
       }
@@ -1243,7 +1302,7 @@ build();
   var rowsBox = document.getElementById('strip-rows');
   if (!rowsBox) return;
   var N = 4, max = 300;
-  var cnt = [], rev = [], note = [];
+  var cnt = [], rev = [];
   for (var i = 0; i < N; i++) {
     var r = document.createElement('div');
     r.className = 'rangeRow';
@@ -1251,11 +1310,10 @@ build();
     r.innerHTML = '<span style="min-width:70px">strip ' + i + '</span>' +
       '<input type="number" min="1" max="300" step="1" value="100" aria-label="LEDs on strip ' + i + '" ' +
       'style="width:88px;background:#0b0c10;border:1px solid var(--line);color:var(--fg);padding:6px 8px;border-radius:5px;font:inherit">' +
-      '<span style="color:var(--dim);font-size:12px;min-width:92px"></span>' +
       '<label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:var(--fg);cursor:pointer">' +
-      '<input type="checkbox" style="accent-color:var(--acc)"> start from the far end</label>';
+      '<input type="checkbox" style="accent-color:var(--acc)"> reverse orientation</label>';
     rowsBox.appendChild(r);
-    cnt.push(r.children[1]); note.push(r.children[2]); rev.push(r.children[3].querySelector('input'));
+    cnt.push(r.children[1]); rev.push(r.children[2].querySelector('input'));
   }
   var status = document.getElementById('strip-status');
   var lastEdit = 0, sending = false, pending = false, defaults = null;
@@ -1269,7 +1327,6 @@ build();
       cnt[i].max = max;
       cnt[i].value = j.counts[i];
       rev[i].checked = !!j.reversed[i];
-      note[i].textContent = 'as built: ' + j.defaults[i];
     }
   }
 
@@ -1366,7 +1423,7 @@ build();
     if (active()) {
       g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
       var n = 8, gap = 14, bw = (W - gap * (n + 1)) / n, top = 8, base0 = H - 22;
-      g.font = '12px ui-monospace, monospace'; g.textAlign = 'center';
+      g.font = '14px ui-monospace, monospace'; g.textAlign = 'center';
       for (var i = 0; i < n; i++) {
         var target = (live && audio) ? Math.max(0, Math.min(1, audio.bands[i] || 0)) : 0;
         shown[i] += (target - shown[i]) * (target > shown[i] ? 0.5 : 0.15);   // fast up, slow down
@@ -1380,6 +1437,96 @@ build();
     requestAnimationFrame(draw);
   }
   requestAnimationFrame(draw);
+})();
+</script>
+<script>
+// ---- white light (Basic tab): warm <-> cool slider ----
+(function () {
+  var slider = document.getElementById('white-temp');
+  var swatch = document.getElementById('white-swatch');
+  var readout = document.getElementById('white-readout');
+  var status = document.getElementById('white-status');
+  var lastInput = 0, busy = false, pending = null, active = false, lastSent = null;
+
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(msg, bad) { status.textContent = msg; status.style.color = bad ? 'var(--err)' : 'var(--ok)'; }
+
+  // Track: warm -> cool, painted with the same colour function the lights use.
+  var stops = [];
+  for (var k = WHITE_MIN_K; k <= WHITE_MAX_K; k += 500) stops.push('rgb(' + whiteRGB(k).join(',') + ')');
+  stops.push('rgb(' + whiteRGB(WHITE_MAX_K).join(',') + ')');
+  slider.style.background = 'linear-gradient(to right,' + stops.join(',') + ')';
+
+  // Show the colour for temperature k. `on` = the lights are really showing it.
+  function show(k, on) {
+    swatch.style.background = 'rgb(' + whiteRGB(k).join(',') + ')';
+    swatch.style.opacity = on ? '1' : '0.35';
+    slider.classList.toggle('off', !on);
+    readout.textContent = on ? whiteName(k) + ' · ' + k + ' K'
+                             : 'white is off — move or tap the slider to turn it on';
+  }
+
+  // Latest value wins: only the newest temperature is sent if the board is slow.
+  async function send(k) {
+    if (busy) { pending = k; return; }               // a request is in flight: remember only the newest value
+    if (k === lastSent && active) return;            // the board already shows this
+    lastSent = k;                                    // (set only when really sending)
+    busy = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 3000);
+    try {
+      var r = await fetch(base() + '/api/white', { method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'kelvin=' + k });
+      var j = {}; try { j = await r.json(); } catch (e) {}
+      if (r.status === 404) throw new Error('the board needs a firmware update for white');
+      if (!r.ok) throw new Error(j.error || r.status);
+      active = true;
+      say('✓ lights set to ' + whiteName(k).toLowerCase() + ' (' + k + ' K)');
+      if (typeof poll === 'function') poll();
+    } catch (e) {
+      active = false; lastSent = null;
+      show(+slider.value, false);
+      say('✗ could not set white: ' + (e.name === 'AbortError' ? 'the lights did not answer' : e.message), true);
+    }
+    clearTimeout(to);
+    busy = false;
+    if (pending !== null) { var n = pending; pending = null; send(n); }
+  }
+
+  slider.addEventListener('input', function () {
+    lastInput = Date.now();
+    var k = +slider.value;
+    show(k, true);
+    send(k);
+  });
+  // A plain tap on the thumb (no movement) should still turn the white on.
+  slider.addEventListener('pointerup', function () { lastInput = Date.now(); if (!active) { show(+slider.value, true); send(+slider.value); } });
+  slider.addEventListener('keyup', function () { if (!active) { show(+slider.value, true); send(+slider.value); } });
+
+  // Keep the slider in step with what the board is really showing: choosing a colour, a pattern
+  // or a custom formula switches the white off on the board.
+  function sync(white) {
+    if (Date.now() - lastInput < 2500 || busy) return;   // don't fight a drag in progress
+    if (white) { active = true; lastSent = white; slider.value = white; show(+slider.value, true); }
+    else {
+      active = false; lastSent = null; show(+slider.value, false);
+      if (status.textContent.indexOf('set to') > 0) status.textContent = '';
+    }
+  }
+  document.addEventListener('devstate', function (e) { sync(e.detail.white || null); });
+  async function refresh() {
+    var tab = document.getElementById('tab-basic');
+    if (!tab || !tab.classList.contains('active') || busy) return;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1500);
+    try { var j = await (await fetch(base() + '/api/slots', { signal: ctl.signal })).json(); sync(j.white || null); }
+    catch (e) { /* offline: keep what is shown */ }
+    clearTimeout(to);
+  }
+  setInterval(refresh, 3000);
+  document.querySelectorAll('[data-tab="basic"], [data-go="basic"]').forEach(function (b) {
+    b.addEventListener('click', function () { setTimeout(refresh, 0); });
+  });
+  show(+slider.value, false);
+  setTimeout(refresh, 600);
 })();
 </script>
 </body>

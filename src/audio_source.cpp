@@ -37,21 +37,30 @@ static const uint16_t BAND_EDGES[9] = { 1, 3, 5, 9, 16, 30, 60, 130, 300 };
 // same sound always maps to the same output. A band reads 0 until it exceeds
 // floor + marginDb.
 #define CALIB_SPECTRA    282        // ~3 s of spectra averaged by "calibrate"
-#define TUNE_VERSION     2          // bump when AudioTuning changes (old saved blobs are ignored)
+#define TUNE_VERSION     3          // bump when AudioTuning changes (older layouts are migrated in audio_tuning_load)
 
 // Defaults: measured in a quiet room (fan only, after the 90 Hz high-pass).
 static const AudioTuning TUNE_DEFAULT = {
     { -78, -80, -84, -86, -85, -89, -92, -95 },  // floorDb
     5.0f,                                        // marginDb
-    -55.0f                                       // minCeilDb
+    -55.0f,                                      // minCeilDb
+    40.0f                                        // smoothness
 };
 // DC removal. MEMS mics output a small constant offset; with the Hann window it leaks
 // into FFT bin 1 and pins band 0 near full scale. A one-pole running average
 // (corner ~7 Hz at 48 kHz, well below the lowest band) is subtracted per sample.
 #define DC_ALPHA      0.001f    // diagnostic DC tracker only
 #define HPF_HZ        90.0f     // 2nd-order high-pass corner (below band 0 start of ~94 Hz)
-#define ATTACK        0.60f     // smoothing toward a higher value (per spectrum)
-#define DECAY         0.90f     // multiplier when the value falls
+// Time smoothing of each band's 0..1 value (see AudioTuning::smoothness). The value
+// follows its target with a fast attack and a slower release. Both are time constants
+// in milliseconds, so the feel does not depend on how often spectra arrive:
+//   attack  = 10 + 0.7 * smoothness  ms   (10 .. 80)
+//   release = 60 + 4.4 * smoothness  ms   (60 .. 500)
+// The default (smoothness 40) is about 38 ms attack, 236 ms release.
+#define SMOOTH_ATTACK_BASE_MS   10.0f
+#define SMOOTH_ATTACK_SLOPE     0.7f
+#define SMOOTH_RELEASE_BASE_MS  60.0f
+#define SMOOTH_RELEASE_SLOPE    4.4f
 
 // ---------------------------------------------------------------- State
 static AudioSourceKind g_kind = AUDIO_SRC_MIC;
@@ -214,6 +223,13 @@ static void analyse_block() {
     else g_ceilDb -= CEIL_FALL_DB;
     if (g_ceilDb < t.minCeilDb) g_ceilDb = t.minCeilDb;
 
+    // Smoothing coefficients for this spectrum, from the time constants (alpha = 1 - e^(-dt/tau)).
+    const float dt     = (float)HOP_N / (float)SAMPLE_RATE;                 // seconds between spectra
+    const float tauAtk = (SMOOTH_ATTACK_BASE_MS  + SMOOTH_ATTACK_SLOPE  * t.smoothness) * 0.001f;
+    const float tauRel = (SMOOTH_RELEASE_BASE_MS + SMOOTH_RELEASE_SLOPE * t.smoothness) * 0.001f;
+    const float aAtk   = 1.0f - expf(-dt / tauAtk);
+    const float aRel   = 1.0f - expf(-dt / tauRel);
+
     AudioFeatures f;
     float sum = 0.0f;
     for (int b = 0; b < 8; b++) {
@@ -222,8 +238,8 @@ static void analyse_block() {
         if (span < MIN_RANGE_DB) span = MIN_RANGE_DB;
         float v = (db[b] - bottom) / span;
         v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
-        if (v > g_smooth[b]) g_smooth[b] += (v - g_smooth[b]) * ATTACK;
-        else                 g_smooth[b] *= DECAY;
+        // Follow the target: quickly when it rises, more slowly when it falls.
+        g_smooth[b] += (v - g_smooth[b]) * (v > g_smooth[b] ? aAtk : aRel);
         f.bands[b] = g_smooth[b];
         sum += g_smooth[b];
     }
@@ -256,6 +272,7 @@ void audio_tuning_set(const AudioTuning &in) {
     for (int b = 0; b < 8; b++) t.floorDb[b] = clampf(t.floorDb[b], -120.0f, -20.0f);
     t.marginDb   = clampf(t.marginDb,   0.0f,   20.0f);
     t.minCeilDb  = clampf(t.minCeilDb,  -80.0f, -20.0f);
+    t.smoothness = clampf(t.smoothness, 0.0f,   100.0f);
     portENTER_CRITICAL(&g_featMux);
     g_tune = t;
     portEXIT_CRITICAL(&g_featMux);
@@ -277,14 +294,29 @@ bool audio_tuning_save() {
     return n == sizeof(blob);
 }
 
+// Layout used by saved version 2 (before smoothness existed). Kept so settings saved
+// by an older firmware are carried over, not thrown away.
+struct TuneV2     { float floorDb[8]; float marginDb; float minCeilDb; };
+struct TuneBlobV2 { uint8_t version; TuneV2 t; };
+
 static void audio_tuning_load() {
     Preferences p;
     if (!p.begin("mic", true)) return;
+    const size_t len = p.getBytesLength("tune");
     TuneBlob blob;
-    if (p.getBytesLength("tune") == sizeof(blob) &&
+    TuneBlobV2 old;
+    if (len == sizeof(blob) &&
         p.getBytes("tune", &blob, sizeof(blob)) == sizeof(blob) &&
         blob.version == TUNE_VERSION) {
         audio_tuning_set(blob.t);
+    } else if (len == sizeof(old) &&
+               p.getBytes("tune", &old, sizeof(old)) == sizeof(old) &&
+               old.version == 2) {
+        AudioTuning t = TUNE_DEFAULT;                    // new fields start at their defaults
+        for (int b = 0; b < 8; b++) t.floorDb[b] = old.t.floorDb[b];
+        t.marginDb  = old.t.marginDb;
+        t.minCeilDb = old.t.minCeilDb;
+        audio_tuning_set(t);
     }
     p.end();
 }

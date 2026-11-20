@@ -46,7 +46,22 @@ High pass filter hardware?
 have default patterns stored on board
 Consider adding OTA so board doesn't need to be flashed by cable
 
-Split advanved configurations into two different tabs. The first tab should be titled custom. At the top is should say make your own pattern. The page should include the entire expr3ession card, the preview card, the brightness card, and the uplaod and refresh buttons. The other tab should be called setup. The top should say configure your lights. The page should include the esp32 connection and the microphone tunning. The microphone tunning should no longer be hidden. Add these new tabs to the home page.
+Make the % lable on the sliders 2 px larger. 
 
-On the home page: remove the "live from lights" subtitle. Move the lights on button and brightness slider down so it's more centered in the card.
+Make the "now showing" text on the home page the same lettering as the ✓ patterns loaded message on the custom tab
 
+Change the website background to a gradient from navy to dark gray
+
+
+Adjust the sensitivity of each frequency band by changing the noise floor. The noise floor is volume above which sound is registered. 
+
+Drag a floor to just above that band's "now" reading in a quiet room, or press Calibrate for manual adjustment.
+
+
+Add an addition margin to the per band noise floors.
+
+Raise it if the lights flicker in silence, and lower it if they miss quiet sounds.
+
+
+Set how loud a band must get to reach full strength.
+If the lights flash to full on quiet noise between songs, raise it. If the lights never reach full brightness even on loud music, lower it.
