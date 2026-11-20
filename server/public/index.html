@@ -332,6 +332,32 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
     </div>
 
   <div class="panel">
+    <details id="tune-box">
+      <summary style="cursor:pointer"><label style="display:inline;cursor:pointer">microphone tuning</label></summary>
+      <div class="meta" style="margin:8px 0 12px">Each band stays dark until it rises above its
+        <b>floor</b> plus the <b>margin</b>. Drag a floor to just above that band's "now" reading in a quiet room,
+        or press <b>Calibrate</b> while the room is quiet. Changes apply live; press <b>Save to board</b> to keep them after a reboot.</div>
+      <div id="tune-rows"></div>
+      <div class="rangeRow" style="margin-top:10px">
+        <span style="min-width:120px">margin</span>
+        <input id="tune-margin" type="range" min="0" max="15" step="0.5" value="5">
+        <span id="tune-margin-val" style="min-width:64px;text-align:right">5 dB</span>
+      </div>
+      <div class="rangeRow">
+        <span style="min-width:120px">loudest at least</span>
+        <input id="tune-ceil" type="range" min="-80" max="-30" step="1" value="-55">
+        <span id="tune-ceil-val" style="min-width:64px;text-align:right">-55 dB</span>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="tune-cal">Calibrate (quiet room)</button>
+        <button class="primary" id="tune-save">Save to board</button>
+        <button id="tune-reset">Reset defaults</button>
+      </div>
+      <div id="tune-status" class="meta"></div>
+    </details>
+  </div>
+
+  <div class="panel">
     <div class="row">
       <button class="primary" id="send">Upload &amp; activate</button>
       <button id="refresh">Refresh Device</button>
@@ -1039,6 +1065,97 @@ build();
     var b = e.detail.brightness;
     if (typeof b === 'number' && Date.now() - lastBriInput > 2000) setSliders(b);
   });
+})();
+</script>
+<script>
+// ---- microphone tuning (Advanced tab) ----
+(function () {
+  var box = document.getElementById('tune-box');
+  if (!box) return;
+  var NAMES = ['47–94 Hz', '141–234 Hz', '234–422 Hz', '422–750 Hz',
+               '750 Hz–1.4k', '1.4–2.8k', '2.8–6.1k', '6.1–14k'];
+  var rows = document.getElementById('tune-rows');
+  var fl = [], nowEl = [], valEl = [];
+  for (var i = 0; i < 8; i++) {
+    var r = document.createElement('div');
+    r.className = 'rangeRow';
+    r.innerHTML = '<span style="min-width:120px">band ' + i + ' <span style="color:var(--dim);font-size:11px">' +
+      NAMES[i] + '</span></span><input type="range" min="-110" max="-40" step="0.5" value="-80">' +
+      '<span style="min-width:64px;text-align:right"></span><span style="min-width:84px;text-align:right;font-size:12px"></span>';
+    rows.appendChild(r);
+    fl.push(r.children[1]); valEl.push(r.children[2]); nowEl.push(r.children[3]);
+  }
+  var margin = document.getElementById('tune-margin'), ceil = document.getElementById('tune-ceil'),
+      status = document.getElementById('tune-status');
+  var lastEdit = 0, sending = false, pending = false, loaded = false;
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(m, bad) { status.textContent = m; status.style.color = bad ? 'var(--err)' : 'var(--dim)'; }
+  function labels() {
+    for (var i = 0; i < 8; i++) valEl[i].textContent = (+fl[i].value).toFixed(1) + ' dB';
+    document.getElementById('tune-margin-val').textContent = margin.value + ' dB';
+    document.getElementById('tune-ceil-val').textContent = ceil.value + ' dB';
+  }
+  async function push() {                       // latest value wins
+    if (sending) { pending = true; return; }
+    sending = true;
+    var body = { floors: fl.map(function (s) { return +s.value; }),
+                 margin: +margin.value, minCeil: +ceil.value };
+    try {
+      var r = await fetch(base() + '/api/tuning', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      say(r.ok ? 'applied (not saved yet)' : 'board rejected the change', !r.ok);
+    } catch (e) { say('lights not reachable', true); }
+    sending = false;
+    if (pending) { pending = false; push(); }
+  }
+  var timer = null;
+  function edited() { lastEdit = Date.now(); labels(); clearTimeout(timer); timer = setTimeout(push, 120); }
+  fl.concat([margin, ceil]).forEach(function (s) { s.addEventListener('input', edited); });
+
+  async function post(path) { return fetch(base() + path, { method: 'POST' }); }
+  document.getElementById('tune-cal').addEventListener('click', async function () {
+    try { await post('/api/mic/calibrate'); say('calibrating… keep the room quiet for 3 seconds'); lastEdit = 0; loaded = false; }
+    catch (e) { say('lights not reachable', true); }
+  });
+  document.getElementById('tune-save').addEventListener('click', async function () {
+    try { var r = await post('/api/mic/save'); say(r.ok ? 'saved to the board' : 'save failed', !r.ok); }
+    catch (e) { say('lights not reachable', true); }
+  });
+  document.getElementById('tune-reset').addEventListener('click', async function () {
+    try { await post('/api/mic/reset'); loaded = false; say('defaults restored'); }
+    catch (e) { say('lights not reachable', true); }
+  });
+
+  var busy = false;
+  async function refresh() {
+    if (busy || !box.open) return;
+    var tab = document.getElementById('tab-advanced');
+    if (tab && !tab.classList.contains('active')) return;
+    busy = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var j = await (await fetch(base() + '/api/tuning', { signal: ctl.signal })).json();
+      var editing = Date.now() - lastEdit < 2000;
+      if ((!editing && !j.calibrating) || !loaded) {
+        for (var i = 0; i < 8; i++) fl[i].value = j.floors[i];
+        margin.value = j.margin; ceil.value = j.minCeil;
+        labels();
+        loaded = !j.calibrating;
+      }
+      for (var k = 0; k < 8; k++) {
+        var above = j.raw[k] - (+fl[k].value + +margin.value);
+        nowEl[k].textContent = 'now ' + j.raw[k].toFixed(1);
+        nowEl[k].style.color = above > 0 ? 'var(--ok)' : 'var(--dim)';
+      }
+      if (j.calibrating) say('calibrating… keep the room quiet');
+      else if (status.textContent.indexOf('calibrating') === 0) say('calibrated — press Save to board to keep it');
+    } catch (e) { /* offline: leave the last values */ }
+    clearTimeout(to);
+    busy = false;
+  }
+  setInterval(refresh, 400);
+  box.addEventListener('toggle', function () { if (box.open) { loaded = false; refresh(); } });
+  labels();
 })();
 </script>
 </body>

@@ -320,6 +320,72 @@ static void setupHttpRoutes() {
         r->send(200, "application/json", s);
     });
 
+    // GET /api/tuning -- current mic level settings plus the live per-band level in
+    // dBFS ("raw"), so the UI can show each band against its floor.
+    server.on("/api/tuning", HTTP_GET, [](AsyncWebServerRequest *r) {
+        AudioTuning t; float raw[8]; bool cal;
+        audio_tuning_get(&t, raw, &cal);
+        JsonDocument d;
+        JsonArray fl = d["floors"].to<JsonArray>();
+        JsonArray rw = d["raw"].to<JsonArray>();
+        for (int i = 0; i < 8; i++) { fl.add(t.floorDb[i]); rw.add(raw[i]); }
+        d["margin"]  = t.marginDb;
+        d["minCeil"] = t.minCeilDb;
+        d["calibrating"] = cal;
+        String s;
+        serializeJson(d, s);
+        r->send(200, "application/json", s);
+    });
+
+    // POST /api/tuning  JSON {floors:[8], margin, minCeil} -- any field optional.
+    // Applies live; not saved until POST /api/mic/save.
+    server.on("/api/tuning", HTTP_POST,
+              [](AsyncWebServerRequest *r) {}, nullptr,
+              [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
+        static String buf;
+        if (index == 0) buf = "";
+        buf.concat((const char *)data, len);
+        if (index + len != total) return;
+
+        JsonDocument doc;
+        if (deserializeJson(doc, buf)) {
+            req->send(400, "application/json", "{\"error\":\"malformed JSON\"}");
+            return;
+        }
+        AudioTuning t;
+        audio_tuning_get(&t, nullptr, nullptr);
+        JsonArray fl = doc["floors"];
+        if (!fl.isNull()) {
+            if (fl.size() != 8) {
+                req->send(400, "application/json", "{\"error\":\"floors needs 8 values\"}");
+                return;
+            }
+            for (int i = 0; i < 8; i++) t.floorDb[i] = fl[i] | t.floorDb[i];
+        }
+        t.marginDb  = doc["margin"]  | t.marginDb;
+        t.minCeilDb = doc["minCeil"] | t.minCeilDb;
+        audio_tuning_set(t);   // clamps to safe ranges
+        req->send(200, "application/json", "{\"ok\":true}");
+    });
+
+    // POST /api/mic/calibrate -- ~3 s: make the current room the floor table.
+    server.on("/api/mic/calibrate", HTTP_POST, [](AsyncWebServerRequest *r) {
+        audio_tuning_calibrate();
+        r->send(200, "application/json", "{\"ok\":true}");
+    });
+
+    // POST /api/mic/save -- persist the current settings to flash.
+    server.on("/api/mic/save", HTTP_POST, [](AsyncWebServerRequest *r) {
+        if (audio_tuning_save()) r->send(200, "application/json", "{\"ok\":true}");
+        else r->send(500, "application/json", "{\"error\":\"save failed\"}");
+    });
+
+    // POST /api/mic/reset -- back to the built-in defaults (also clears the saved copy).
+    server.on("/api/mic/reset", HTTP_POST, [](AsyncWebServerRequest *r) {
+        audio_tuning_reset();
+        r->send(200, "application/json", "{\"ok\":true}");
+    });
+
     server.begin();
 }
 

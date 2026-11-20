@@ -45,4 +45,6 @@ make brightness adjustable
 add white light
 add plain color
 mic sensitivity control
+explain setup
+High pass filter hardware?
 

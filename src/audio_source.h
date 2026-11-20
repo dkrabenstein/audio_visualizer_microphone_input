@@ -26,6 +26,23 @@ bool audio_source_begin(AudioSourceKind kind);
 
 AudioSourceKind audio_source_kind();
 
+// ---- Microphone level tuning (adjustable from the web UI) ----
+// All levels are dBFS (0 = full-scale sine). A band reads 0 until it exceeds
+// floorDb[b] + marginDb, and reaches 1 at the adaptive ceiling.
+struct AudioTuning {
+    float floorDb[8];   // per-band noise floor table (the primary setting)
+    float marginDb;     // extra dB above the floor before a band starts to show
+    float minCeilDb;    // the "loud" end never drops below this
+};
+
+void audio_tuning_defaults(AudioTuning *out);
+// Any pointer may be null. rawDb = latest per-band level (to compare against the floors).
+void audio_tuning_get(AudioTuning *out, float rawDb[8], bool *calibrating);
+void audio_tuning_set(const AudioTuning &t);   // clamps to sane ranges; live, not saved
+void audio_tuning_calibrate();                 // ~3 s: floors := average of the current room
+bool audio_tuning_save();                      // persist to flash (NVS)
+void audio_tuning_reset();                     // defaults, and forget the saved copy
+
 // Thread-safe snapshot of the latest features.
 void audio_source_get(AudioFeatures *out);
 
