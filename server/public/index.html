@@ -186,7 +186,6 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
           <input id="home-bri" type="range" min="0" max="100" value="100">
           <span id="home-bri-val" style="min-width:42px;text-align:right">100%</span>
         </div>
-        <div class="meta">on/off and brightness aren't connected to the lights yet</div>
       </div>
     </div>
   </div>
@@ -226,7 +225,6 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
           <button class="switch" id="pwr-basic" aria-pressed="true" style="min-width:96px">Lights on</button>
         </div>
       </div>
-      <div class="meta">not connected to the lights yet</div>
     </div>
   </div>
 </div>
@@ -247,7 +245,6 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
           <button class="switch" id="pwr-pat" aria-pressed="true" style="min-width:96px">Lights on</button>
         </div>
       </div>
-      <div class="meta">not connected to the lights yet</div>
     </div>
   </div>
 </div>
@@ -332,7 +329,6 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
           <button class="switch" id="pwr-adv" aria-pressed="true" style="min-width:96px">Lights on</button>
         </div>
       </div>
-      <div class="meta">not connected to the lights yet</div>
     </div>
 
   <div class="panel">
@@ -971,21 +967,77 @@ build();
 
   // ---- quick controls (UI only for now) ----
   var switches = ['pwr', 'pwr-basic', 'pwr-pat', 'pwr-adv'];
+  var lastPwrInput = 0, pwrBusy = false, pwrPending = null;
+
+  function setSwitches(on) {
+    switches.forEach(function (o) {
+      el(o).setAttribute('aria-pressed', on ? 'true' : 'false');
+      el(o).textContent = on ? 'Lights on' : 'Lights off';
+    });
+  }
+  async function sendPower(on) {                  // latest value wins, like brightness
+    if (pwrBusy) { pwrPending = on; return; }
+    pwrBusy = true;
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 1500);
+    try {
+      await fetch(base + '/api/power', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'on=' + (on ? '1' : '0') });
+    } catch (e) {}
+    clearTimeout(to);
+    pwrBusy = false;
+    if (pwrPending !== null) { var n = pwrPending; pwrPending = null; sendPower(n); }
+  }
   switches.forEach(function (id) {                // keep every on/off switch in step
     el(id).addEventListener('click', function () {
       var on = el(id).getAttribute('aria-pressed') !== 'true';
-      switches.forEach(function (o) {
-        el(o).setAttribute('aria-pressed', on ? 'true' : 'false');
-        el(o).textContent = on ? 'Lights on' : 'Lights off';
-      });
+      lastPwrInput = Date.now();
+      setSwitches(on);
+      sendPower(on);
     });
   });
+  // Show the board's real state (e.g. after a reload), unless the user just clicked.
+  document.addEventListener('devstate', function (e) {
+    if (typeof e.detail.on === 'boolean' && Date.now() - lastPwrInput > 2000) setSwitches(e.detail.on);
+  });
   var sliders = ['bri', 'home-bri', 'pat-bri', 'adv-bri'];
+  var lastBriInput = 0, briBusy = false, briPending = null;
+
+  function setSliders(v) {
+    sliders.forEach(function (o) { el(o).value = v; el(o + '-val').textContent = v + '%'; });
+  }
+  // Latest value wins: while a request is in flight only the newest value is kept.
+  async function sendBrightness(v) {
+    if (briBusy) { briPending = v; return; }
+    briBusy = true;
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 1500);
+    try {
+      await fetch(base + '/api/brightness', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'value=' + v });
+    } catch (e) {}
+    clearTimeout(to);
+    briBusy = false;
+    if (briPending !== null) { var n = briPending; briPending = null; sendBrightness(n); }
+  }
   sliders.forEach(function (id) {                 // keep every brightness slider in step
     el(id).addEventListener('input', function () {
       var v = el(id).value;
-      sliders.forEach(function (o) { el(o).value = v; el(o + '-val').textContent = v + '%'; });
+      lastBriInput = Date.now();
+      setSliders(v);
+      sendBrightness(v);
     });
+  });
+  // Show the board's real brightness (e.g. after a reload), unless the user is mid-change.
+  document.addEventListener('devstate', function (e) {
+    var b = e.detail.brightness;
+    if (typeof b === 'number' && Date.now() - lastBriInput > 2000) setSliders(b);
   });
 })();
 </script>

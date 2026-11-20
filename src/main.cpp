@@ -111,6 +111,12 @@ static const uint16_t STRIP_LENGTHS[NUM_STRIPS] = {
 
 #define MAX_MILLIAMPS 6000
 
+// Brightness control from the web UI is a percentage, 0..100. 100% maps to this
+// FastLED brightness value, which is the level the firmware has always run at, so
+// the UI can only dim relative to the existing setting. The FastLED current limit
+// (MAX_MILLIAMPS above) still applies on top of this.
+#define MAX_BRIGHTNESS 160
+
 static DRAM_ATTR CRGB leds0[NUM_LED0];
 static DRAM_ATTR CRGB leds1[NUM_LED1];
 static DRAM_ATTR CRGB leds2[NUM_LED2];
@@ -121,6 +127,8 @@ static CRGB* const stripBuffers[NUM_STRIPS] = { leds0, leds1, leds2, leds3 };
 static volatile uint32_t g_frames = 0;
 static volatile float    g_fps = 0;
 static volatile uint32_t g_evalUs = 0;
+static volatile uint8_t  g_brightnessPct = 100;   // set by POST /api/brightness
+static volatile bool     g_lightsOn = true;       // set by POST /api/power
 
 // ---------------------------------------------------------------- HTTP Handlers
 static void handlePatternBody(AsyncWebServerRequest *req, uint8_t *data,
@@ -238,6 +246,8 @@ static void setupHttpRoutes() {
         audio_source_get(&af);
         d["level"] = af.level;  // latest audio level; 0 = silence / no input
         d["source"] = audio_source_kind() == AUDIO_SRC_MIC ? "mic" : "udp";
+        d["brightness"] = g_brightnessPct;
+        d["on"] = (bool)g_lightsOn;   // cast: ArduinoJson would serialise a volatile bool as 0/1
 
         JsonArray stripLens = d["stripLengths"].to<JsonArray>();
         for (int i = 0; i < NUM_STRIPS; i++) {
@@ -256,6 +266,41 @@ static void setupHttpRoutes() {
         String s; 
         serializeJson(d, s);
         r->send(200, "application/json", s);
+    });
+
+    // POST /api/power   on=1 or on=0 (form body or query string)
+    server.on("/api/power", HTTP_POST, [](AsyncWebServerRequest *r) {
+        auto p = r->hasParam("on", true) ? r->getParam("on", true)
+               : (r->hasParam("on", false) ? r->getParam("on", false) : nullptr);
+        if (!p) {
+            r->send(400, "application/json", "{\"error\":\"missing on parameter\"}");
+            return;
+        }
+        const String v = p->value();
+        if (v != "0" && v != "1") {
+            r->send(400, "application/json", "{\"error\":\"on must be 0 or 1\"}");
+            return;
+        }
+        g_lightsOn = (v == "1");
+        r->send(200, "application/json", String("{\"ok\":true,\"on\":") + (g_lightsOn ? "true" : "false") + "}");
+    });
+
+    // POST /api/brightness   value=0..100 (form body or query string)
+    server.on("/api/brightness", HTTP_POST, [](AsyncWebServerRequest *r) {
+        auto p = r->hasParam("value", true) ? r->getParam("value", true)
+               : (r->hasParam("value", false) ? r->getParam("value", false) : nullptr);
+        if (!p) {
+            r->send(400, "application/json", "{\"error\":\"missing value parameter\"}");
+            return;
+        }
+        const String v = p->value();
+        const int pct = v.toInt();
+        if (pct < 0 || pct > 100 || String(pct) != v) {
+            r->send(400, "application/json", "{\"error\":\"value must be a whole number 0-100\"}");
+            return;
+        }
+        g_brightnessPct = (uint8_t)pct;
+        r->send(200, "application/json", String("{\"ok\":true,\"value\":") + pct + "}");
     });
 
     // GET /api/audio -- latest audio features, read-only. The web UI's live
@@ -398,6 +443,10 @@ static void renderTask(void *) {
         }
         g_evalUs = micros() - t0;
 
+        // Applied here, in the render task, so every FastLED call stays on Core 1.
+        // "Off" is brightness 0 (all LEDs black); the chosen percentage is kept for when it is back on.
+        const uint32_t pct = g_lightsOn ? g_brightnessPct : 0;
+        FastLED.setBrightness((uint8_t)((pct * MAX_BRIGHTNESS + 50) / 100));
         FastLED.show();
 
         if (++frameCount >= 30) {
