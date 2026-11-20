@@ -31,6 +31,10 @@ static const uint16_t BAND_EDGES[9] = { 1, 3, 5, 9, 16, 30, 60, 130, 300 };
 #define MIN_CEIL_DB   (-70.0f)  // ceiling never drops below this, so silence stays dark
 #define DYN_RANGE_DB  (45.0f)
 #define CEIL_FALL_DB  (0.02f)   // dB the ceiling drops per spectrum (~2 dB/s)
+// DC removal. MEMS mics output a small constant offset; with the Hann window it leaks
+// into FFT bin 1 and pins band 0 near full scale. A one-pole running average
+// (corner ~7 Hz at 48 kHz, well below the lowest band) is subtracted per sample.
+#define DC_ALPHA      0.001f
 #define ATTACK        0.60f     // smoothing toward a higher value (per spectrum)
 #define DECAY         0.90f     // multiplier when the value falls
 
@@ -48,6 +52,8 @@ static uint16_t g_bitrev[FFT_N];
 
 static float g_ceilDb = MIN_CEIL_DB;
 static float g_smooth[8] = {0};
+static float g_dc = 0.0f;           // running DC estimate (full-scale units)
+static bool  g_dcSeeded = false;
 
 // ---------------------------------------------------------------- FFT
 static void fft_init() {
@@ -154,7 +160,13 @@ static void micTask(void *) {
 
         for (int i = 0; i < n; i++) {
             // 24-bit sample sits left-justified in the 32-bit slot -> >>8, then to -1..1.
-            const float s = (float)(g_i2sBuf[i] >> 8) * (1.0f / 8388608.0f);
+            float s = (float)(g_i2sBuf[i] >> 8) * (1.0f / 8388608.0f);
+
+            // Remove DC. Seed from the first sample so boot doesn't start with a
+            // transient that would park the loudness ceiling high for seconds.
+            if (!g_dcSeeded) { g_dc = s; g_dcSeeded = true; }
+            g_dc += (s - g_dc) * DC_ALPHA;
+            s -= g_dc;
 
             // Collect HOP_N new samples, then slide the ring and run one FFT
             // (50% overlap with the previous window).
