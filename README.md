@@ -47,4 +47,9 @@ add plain color
 mic sensitivity control
 explain setup
 High pass filter hardware?
+have default patterns stored on board
+
+Split advanved configurations into two different tabs. The first tab should be titled custom. At the top is should say make your own pattern. The page should include the entire expr3ession card, the preview card, the brightness card, and the uplaod and refresh buttons. The other tab should be called setup. The top should say configure your lights. The page should include the esp32 connection and the microphone tunning. The microphone tunning should no longer be hidden. Add these new tabs to the home page.
+
+On the home page: remove the "live from lights" subtitle. Move the lights on button and brightness slider down so it's more centered in the card.
 

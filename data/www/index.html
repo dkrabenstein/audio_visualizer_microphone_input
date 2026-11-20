@@ -119,7 +119,8 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
     <button id="btn-home" role="tab" data-tab="home">Home</button>
     <button id="btn-basic" role="tab" data-tab="basic">Basic</button>
     <button id="btn-patterns" role="tab" data-tab="patterns">Patterns</button>
-    <button id="btn-advanced" role="tab" data-tab="advanced">Advanced</button>
+    <button id="btn-custom" role="tab" data-tab="custom">Custom</button>
+    <button id="btn-setup" role="tab" data-tab="setup">Setup</button>
   </div>
 </div>
 
@@ -157,12 +158,18 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
         </span>
         <canvas id="prev-patterns" width="120" height="36"></canvas>
       </button>
-      <button class="navcard" data-go="advanced">
+      <button class="navcard" data-go="custom">
         <span class="nc-text">
-          <span class="nc-title">Advanced</span>
-          <span class="nc-desc">Write your own formula for the lights and watch a live preview.</span>
+          <span class="nc-title">Custom</span>
+          <span class="nc-desc">Make your own pattern: write a formula for the lights and watch a live preview.</span>
         </span>
-        <canvas id="prev-advanced" width="120" height="36"></canvas>
+        <canvas id="prev-custom" width="120" height="36"></canvas>
+      </button>
+      <button class="navcard" data-go="setup">
+        <span class="nc-text">
+          <span class="nc-title">Setup</span>
+          <span class="nc-desc">Configure your lights: connect to the board and tune the microphone.</span>
+        </span>
       </button>
     </div>
 
@@ -244,9 +251,9 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
   </div>
 </div>
 
-<div id="tab-advanced" class="tab">
+<div id="tab-custom" class="tab">
 <div class="wrap">
-  <h1 style="margin-bottom:18px">ADVANCED CONFIGURATIONS</h1>
+  <h1 style="margin-bottom:18px">MAKE YOUR OWN PATTERN</h1>
 
   <div class="panel">
     <label>expression</label>
@@ -312,8 +319,23 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
     </div>
 
   <div class="panel">
-    <details id="tune-box">
-      <summary style="cursor:pointer"><label style="display:inline;cursor:pointer">microphone tuning</label></summary>
+    <div class="row">
+      <button class="primary" id="send">Upload &amp; activate</button>
+      <button id="refresh">Refresh</button>
+    </div>
+  </div>
+
+</div>
+
+</div>
+
+<div id="tab-setup" class="tab">
+<div class="wrap">
+  <h1 style="margin-bottom:18px">CONFIGURE YOUR LIGHTS</h1>
+
+  <div class="panel">
+    <label>microphone tuning</label>
+    <div id="tune-box">
       <div class="meta" style="margin:8px 0 12px">Each band stays dark until it rises above its
         <b>floor</b> plus the <b>margin</b>. Drag a floor to just above that band's "now" reading in a quiet room,
         or press <b>Calibrate</b> while the room is quiet. Changes apply live; press <b>Save to board</b> to keep them after a reboot.</div>
@@ -334,13 +356,6 @@ button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-co
         <button id="tune-reset">Reset defaults</button>
       </div>
       <div id="tune-status" class="meta"></div>
-    </details>
-  </div>
-
-  <div class="panel">
-    <div class="row">
-      <button class="primary" id="send">Upload &amp; activate</button>
-      <button id="refresh">Refresh</button>
     </div>
   </div>
 
@@ -429,10 +444,19 @@ $('#send').onclick = async () => {
   }
 };
 
+let presetHealAt = 0;
 async function poll() {
   try {
     const j = await (await fetch('/api/slots')).json();
     document.dispatchEvent(new CustomEvent('devstate', { detail: j }));
+    // Presets live in the board's RAM, so a reboot or reflash empties them. If the first preset
+    // slot is unused, send them again. The cooldown stops a failing upload from re-triggering
+    // itself through the poll() at the end of uploadPresets().
+    const first = (j.slots || []).find(s => s.i === PRESET_FIRST_SLOT);
+    if (first && !first.used && Date.now() - presetHealAt > 10000) {
+      presetHealAt = Date.now();
+      uploadPresets();
+    }
   } catch (e) {
     document.dispatchEvent(new CustomEvent('devoffline'));  // the preview still works
   }
@@ -455,7 +479,10 @@ PRESETS.forEach((p, n) => {
 
 // Upload every preset to its own slot (PRESET_FIRST_SLOT onward). Only /api/pattern is called, never
 // /api/select, so the running pattern is not interrupted.
+let presetsBusy = false;
 async function uploadPresets() {
+  if (presetsBusy) return;   // overlapping uploads would interleave in the board's request buffer
+  presetsBusy = true;
   try {
     for (let n = 0; n < PRESETS.length; n++) {
       const p = PRESETS[n], slot = PRESET_FIRST_SLOT + n;
@@ -471,6 +498,7 @@ async function uploadPresets() {
     $('#status').className = 'err';
     $('#status').textContent = '✗ preset upload: ' + e.message;
   }
+  presetsBusy = false;
   poll();
 }
 
@@ -480,8 +508,9 @@ build(); uploadPresets();
 <script>
 // --- tabs -------------------------------------------------------------
 (function () {
-  const tabs = ['home', 'basic', 'patterns', 'advanced'];
+  const tabs = ['home', 'basic', 'patterns', 'custom', 'setup'];
   function showTab(name) {
+    if (name === 'advanced') name = 'custom';   // old bookmarks
     if (!tabs.includes(name)) name = 'home';
     tabs.forEach(function (t) {
       document.getElementById('tab-' + t).classList.toggle('active', t === name);
@@ -558,12 +587,26 @@ build(); uploadPresets();
     var title = (INFO[PRESETS[n].name] || [PRESETS[n].name])[0];
     // The laptop page talks to the ESP32 directly (espUrl); the board's own page uses its own address.
     var base = (typeof espUrl === 'function') ? espUrl() : '';
-    try {
+    // One select attempt; resolves to { ok, error } instead of throwing on an HTTP error.
+    async function trySelect() {
       var r = await fetch(base + '/api/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'slot=' + slot });
-      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      var j = {};
+      try { j = await r.json(); } catch (e) {}
+      return { ok: r.ok, error: j.error || r.status };
+    }
+    try {
+      var res = await trySelect();
+      // Presets live in the board's RAM, so a reboot or reflash empties them while this page
+      // stays open. The board then rejects the slot as invalid: re-upload the presets, retry once.
+      if (!res.ok && /invalid slot/i.test(String(res.error)) && typeof uploadPresets === 'function') {
+        status(true, 'loading patterns onto the lights\u2026');
+        await uploadPresets();
+        res = await trySelect();
+      }
+      if (!res.ok) throw new Error(res.error);
       markActive(slot);
       status(true, '\u2713 now showing: ' + title);
     } catch (e) {
@@ -798,7 +841,7 @@ build(); uploadPresets();
       var a = dev.active, n = presetIndex(a);
       if (n >= 0) name = title(PRESETS[n].name);
       else if (a === BASIC_SLOT) { name = 'Single colour'; go = 'basic'; }
-      else if (a === ADVANCED_SLOT) { name = 'Custom formula'; go = 'advanced'; }
+      else if (a === ADVANCED_SLOT) { name = 'Custom formula'; go = 'custom'; }
       else name = 'Default colours';
     }
     el('now-name').textContent = name;
@@ -877,7 +920,7 @@ build(); uploadPresets();
         ? presetIndex(dev.active)
         : Math.floor(t / 3) % PRESETS.length;     // otherwise flip through them
       paintStrip(el('prev-patterns'), presetCode[pi], t, a);
-      paintStrip(el('prev-advanced'), (typeof code !== 'undefined') ? code : null, t, a);
+      paintStrip(el('prev-custom'), (typeof code !== 'undefined') ? code : null, t, a);
 
       drawMeter(a);
     }
@@ -962,7 +1005,7 @@ build(); uploadPresets();
 })();
 </script>
 <script>
-// ---- microphone tuning (Advanced tab) ----
+// ---- microphone tuning (Setup tab) ----
 (function () {
   var box = document.getElementById('tune-box');
   if (!box) return;
@@ -1022,8 +1065,8 @@ build(); uploadPresets();
 
   var busy = false;
   async function refresh() {
-    if (busy || !box.open) return;
-    var tab = document.getElementById('tab-advanced');
+    if (busy) return;
+    var tab = document.getElementById('tab-setup');
     if (tab && !tab.classList.contains('active')) return;
     busy = true;
     var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
@@ -1048,7 +1091,10 @@ build(); uploadPresets();
     busy = false;
   }
   setInterval(refresh, 400);
-  box.addEventListener('toggle', function () { if (box.open) { loaded = false; refresh(); } });
+  // Re-read the board's values whenever the Setup tab is opened.
+  document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
+    b.addEventListener('click', function () { loaded = false; setTimeout(refresh, 0); });
+  });
   labels();
 })();
 </script>
