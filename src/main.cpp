@@ -25,6 +25,7 @@
 #include "expr_vm.h"
 #include "audio_source.h"
 #include "strip_config.h"
+#include "wifi_manager.h"
 
 // Audio source: on-board I2S mic by default. Build with -DAUDIO_USE_UDP to take
 // features from the PC's UDP stream instead (handy for testing without a mic).
@@ -432,6 +433,8 @@ static void setupHttpRoutes() {
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
 
     server.onNotFound([](AsyncWebServerRequest *request) {
+        // While the setup AP is up, unknown hosts (phone connectivity probes) go to the setup page.
+        if (wifi_manager_captive_redirect(request)) return;
         if (request->method() == HTTP_OPTIONS) {
             request->send(200);
         } else {
@@ -733,6 +736,9 @@ static void setupHttpRoutes() {
         r->send(200, "application/json", "{\"ok\":true}");
     });
 
+    // Wi-Fi network: status, scan, set (tested before it is saved), forget.
+    wifi_manager_register_routes(server);
+
     // Web UI: serve data/www (uploaded to LittleFS as /www) at the site root.
     // Registered after the /api routes so those always match first.
     server.serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html");
@@ -760,18 +766,9 @@ static void sendBeacon() {
 }
 
 static void networkTask(void *) {
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    Serial.print("Connecting to Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(250));
-        Serial.print(".");
-    }
-    Serial.printf("\nConnected! ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
-
-    startMdns();
+    // Joins the network saved in flash, or opens the setup access point. Non-blocking: the web
+    // server below must run either way, because in setup mode it is how the network gets chosen.
+    wifi_manager_begin(MDNS_HOSTNAME);
 
     // false = never auto-format: a failed mount just means uploadfs hasn't been run.
     if (!LittleFS.begin(false)) {
@@ -781,32 +778,37 @@ static void networkTask(void *) {
     setupHttpRoutes();
     Serial.println("AsyncWebServer running on port 80");
 
-    // OTA: lets `pio run -e ota -t upload` flash over Wi-Fi. The password stops anyone else on
-    // the network from reflashing the board. mDNS is already started above, so ArduinoOTA's own
-    // mDNS handling is switched off to avoid two owners of the responder.
-    ArduinoOTA.setHostname(MDNS_HOSTNAME);
-    ArduinoOTA.setPassword(OTA_PASSWORD);
-    ArduinoOTA.setMdnsEnabled(false);
-    ArduinoOTA.onStart([]() { Serial.println("OTA: update starting"); });
-    ArduinoOTA.onEnd([]() { Serial.println("OTA: done, rebooting"); });
-    ArduinoOTA.onError([](ota_error_t e) { Serial.printf("OTA error %u\n", (unsigned)e); });
-    ArduinoOTA.begin();
-
-    udp.begin(UDP_PORT);
-    Serial.printf("UDP audio receiver listening on port %u\n", UDP_PORT);
+    bool otaStarted = false;   // ArduinoOTA needs an IP, so it starts on the first connection
 
     AudioPayload packet;
-    bool wasConnected = true;
+    bool wasConnected = false;
     uint32_t lastBeaconMs = 0;
 
     for (;;) {
-        // Connection watchdog: AutoReconnect rejoins Wi-Fi, but the DHCP lease
-        // may differ, so re-announce mDNS and beacon as soon as we're back.
-        const bool connected = (WiFi.status() == WL_CONNECTED);
+        wifi_manager_loop();
+
+        // Connection watchdog: AutoReconnect rejoins Wi-Fi, but the DHCP lease may differ, so
+        // re-announce mDNS and beacon as soon as we're back. The first pass through here is the
+        // initial connection (or never, if the board stays in setup mode).
+        const bool connected = wifi_manager_connected();
         if (connected && !wasConnected) {
-            Serial.printf("Wi-Fi back. ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
+            Serial.printf("Wi-Fi up. ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
             startMdns();
             udp.begin(UDP_PORT);
+            Serial.printf("UDP audio receiver listening on port %u\n", UDP_PORT);
+            if (!otaStarted) {
+                // OTA: lets `pio run -e ota -t upload` flash over Wi-Fi. The password stops anyone
+                // else on the network from reflashing the board. mDNS is started above, so
+                // ArduinoOTA's own mDNS handling is switched off to avoid two owners of the responder.
+                ArduinoOTA.setHostname(MDNS_HOSTNAME);
+                ArduinoOTA.setPassword(OTA_PASSWORD);
+                ArduinoOTA.setMdnsEnabled(false);
+                ArduinoOTA.onStart([]() { Serial.println("OTA: update starting"); });
+                ArduinoOTA.onEnd([]() { Serial.println("OTA: done, rebooting"); });
+                ArduinoOTA.onError([](ota_error_t e) { Serial.printf("OTA error %u\n", (unsigned)e); });
+                ArduinoOTA.begin();
+                otaStarted = true;
+            }
             lastBeaconMs = 0;  // force an immediate beacon
         } else if (!connected && wasConnected) {
             Serial.println("Wi-Fi lost, waiting for auto-reconnect...");
@@ -822,7 +824,7 @@ static void networkTask(void *) {
             sendBeacon();
         }
 
-        int packetSize = udp.parsePacket();
+        int packetSize = connected ? udp.parsePacket() : 0;
         if (packetSize >= (int)sizeof(AudioPayload)) {
             udp.read((char*)&packet, sizeof(AudioPayload));
 
