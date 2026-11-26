@@ -36,7 +36,7 @@ SD  18
 
 ## Firmware conventions
 
-- Build system: PlatformIO. [Fill in: framework, Arduino or ESP-IDF, and the environment name from `platformio.ini`.]
+- Build system: PlatformIO, Arduino framework. Environment `esp32-s3-devkitc-1-n32r16v` (USB upload). Environment `ota` (wireless upload, `pio run -e ota -t upload`; `upload_port` is a hardcoded IP, see the note in `platformio.ini`).
 - The LED update loop must not block. Avoid `delay()` in the render path.
 - Put the signal source behind one interface. Algorithms should receive audio features and not know whether they came from noise or from the microphone. Swapping noise for mic input should touch only the source module.
 - Keep the noise generator available as a fallback or test source after mic input works.
@@ -49,7 +49,7 @@ SD  18
 - Flash firmware: `pio run -t upload`
 - Flash web files: `pio run -t uploadfs`
 - Serial monitor: `pio device monitor`
-- Laptop dev server: [command to run: 'cd server node server.js']
+- Laptop dev server: `cd server && node server.js`
 
 ## Working with this repo
 

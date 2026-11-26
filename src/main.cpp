@@ -3,12 +3,15 @@
 // Core 0: Wi-Fi, AsyncWebServer (REST API), and UDP audio packet receiver.
 // Core 1: Render task (FastLED + expr VM).
 //
-// Storage: In-memory static RAM buffers (no LittleFS / SPI flash I/O).
+// Storage: patterns live in static RAM buffers. LittleFS holds only the web UI
+// files (data/www, flashed with `pio run -t uploadfs`) and is read-only here.
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <ESPmDNS.h>
+#include <LittleFS.h>
+#include <ArduinoOTA.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <FastLED.h>
@@ -542,6 +545,10 @@ static void setupHttpRoutes() {
         r->send(200, "application/json", "{\"ok\":true}");
     });
 
+    // Web UI: serve data/www (uploaded to LittleFS as /www) at the site root.
+    // Registered after the /api routes so those always match first.
+    server.serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html");
+
     server.begin();
 }
 
@@ -578,8 +585,24 @@ static void networkTask(void *) {
 
     startMdns();
 
+    // false = never auto-format: a failed mount just means uploadfs hasn't been run.
+    if (!LittleFS.begin(false)) {
+        Serial.println("LittleFS mount failed: run `pio run -t uploadfs` to install the web UI");
+    }
+
     setupHttpRoutes();
     Serial.println("AsyncWebServer running on port 80");
+
+    // OTA: lets `pio run -e ota -t upload` flash over Wi-Fi. The password stops anyone else on
+    // the network from reflashing the board. mDNS is already started above, so ArduinoOTA's own
+    // mDNS handling is switched off to avoid two owners of the responder.
+    ArduinoOTA.setHostname(MDNS_HOSTNAME);
+    ArduinoOTA.setPassword(OTA_PASSWORD);
+    ArduinoOTA.setMdnsEnabled(false);
+    ArduinoOTA.onStart([]() { Serial.println("OTA: update starting"); });
+    ArduinoOTA.onEnd([]() { Serial.println("OTA: done, rebooting"); });
+    ArduinoOTA.onError([](ota_error_t e) { Serial.printf("OTA error %u\n", (unsigned)e); });
+    ArduinoOTA.begin();
 
     udp.begin(UDP_PORT);
     Serial.printf("UDP audio receiver listening on port %u\n", UDP_PORT);
@@ -601,6 +624,10 @@ static void networkTask(void *) {
             Serial.println("Wi-Fi lost, waiting for auto-reconnect...");
         }
         wasConnected = connected;
+
+        // Services an incoming OTA upload. It blocks for the duration of a transfer, which is
+        // fine: this task only does network work, and rendering runs on core 1.
+        if (connected) ArduinoOTA.handle();
 
         if (connected && (millis() - lastBeaconMs >= BEACON_INTERVAL_MS || lastBeaconMs == 0)) {
             lastBeaconMs = millis();

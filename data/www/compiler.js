@@ -1,12 +1,4 @@
 // compiler.js -- expression -> postfix bytecode, entirely in the browser.
-//
-// The ESP32 never sees infix notation, never sees an identifier, and never
-// parses anything but a flat array of [opcode, arg] pairs. Every syntax
-// question is answered here, where a mistake costs a red underline instead
-// of a watchdog reset.
-//
-// Opcode numbers MUST match firmware/expr_ops.h.
-
 const ABI = 1;
 
 const OP = {
@@ -22,7 +14,6 @@ const VARS = {
   bass: OP.BASS, mid: OP.MID, treb: OP.TREB,
 };
 
-// name -> [opcode, arity]
 const FUNCS = {
   sin: [OP.SIN, 1], cos: [OP.COS, 1], abs: [OP.ABS, 1],
   floor: [OP.FLOOR, 1], fract: [OP.FRACT, 1], sqrt: [OP.SQRT, 1],
@@ -32,7 +23,6 @@ const FUNCS = {
 
 const CONSTS = { pi: Math.PI, tau: 2 * Math.PI, e: Math.E };
 
-// prec, rightAssoc
 const BINOPS = {
   '+': [1, false], '-': [1, false],
   '*': [2, false], '/': [2, false], '%': [2, false],
@@ -46,7 +36,6 @@ class CompileError extends Error {
   constructor(msg, pos) { super(msg); this.pos = pos; }
 }
 
-// --- tokenizer -------------------------------------------------------
 function tokenize(src) {
   const toks = [];
   let i = 0;
@@ -56,10 +45,6 @@ function tokenize(src) {
     if (/[0-9.]/.test(c)) {
       let j = i;
       while (j < src.length && /[0-9.]/.test(src[j])) j++;
-      // Scientific notation. Only consume "e" as an exponent marker when it
-      // is actually followed by digits, so "2*e" still means 2 times Euler's
-      // number while "2e3" means 2000. Without this lookahead the two
-      // readings collide.
       if (j < src.length && /[eE]/.test(src[j])) {
         let k = j + 1;
         if (k < src.length && /[+-]/.test(src[k])) k++;
@@ -91,7 +76,6 @@ function tokenize(src) {
   return toks;
 }
 
-// --- parser: precedence climbing, emits postfix directly -------------
 function compile(src) {
   const toks = tokenize(src);
   const code = [];
@@ -119,9 +103,6 @@ function compile(src) {
     }
   }
 
-  // Unary minus sits between multiplicative and power precedence, matching
-  // ordinary maths convention: -2^2 is -(2^2) = -4, but -2*3 is (-2)*3.
-  // Parsing the operand at POWER_PREC lets "^" bind first while "*" does not.
   const POWER_PREC = BINOPS['^'][0];
 
   function parseUnary() {
@@ -152,8 +133,6 @@ function compile(src) {
       const name = tk.v;
       p++;
 
-      // band(n) -- n must be an integer literal so the firmware can bounds
-      // check it once at upload rather than on every pixel.
       if (name === 'band') {
         if (!peek() || peek().k !== 'lp')
           throw new CompileError('band requires "(index)"', at());
@@ -208,9 +187,6 @@ function compile(src) {
   if (p < toks.length)
     throw new CompileError('trailing input after expression', toks[p].pos);
 
-  // Run the same stack check the firmware runs. Catching it here means the
-  // device should never see an invalid program -- and if it does, that is a
-  // genuine bug rather than user error.
   verifyStack(code);
   return code;
 }
@@ -232,23 +208,7 @@ function verifyStack(code) {
   return depth;
 }
 
-// --- local preview evaluator ----------------------------------------
-// Mirrors expr_eval() so the canvas preview shows what the device will show.
-//
-// Every value is passed through Math.fround(). JavaScript numbers are float64
-// and the ESP32 stack is float32, and the difference is not cosmetic: pow(10,40)
-// is an ordinary finite double but overflows to Infinity in float32. Without
-// fround the preview would happily animate a pattern the strip cannot produce.
-// Caught by differential testing against the compiled VM.
 const f32 = Math.fround;
-
-// The device does not call sinf(). It does a float32 range reduction into a
-// 512-entry LUT with linear interpolation. Modelling that exactly here matters
-// for more than the ~2e-5 interpolation error: for large arguments the float32
-// reduction has no fractional bits left and collapses to zero, so sin(x*1e20)
-// is flat on hardware while Math.sin would happily return a varying value.
-// Simulating idealised sine would make the preview a different pattern, not
-// just a slightly more accurate one.
 const LUT_SIZE = 512;
 const INV_2PI = f32(0.15915494309);
 const sinLut = new Float32Array(LUT_SIZE + 1);
@@ -256,7 +216,7 @@ for (let i = 0; i <= LUT_SIZE; i++)
   sinLut[i] = f32(Math.sin(i * 2 * Math.PI / LUT_SIZE));
 
 function sSin(rad) {
-  if (!Number.isFinite(rad)) return 0;           // matches fastSin() guard
+  if (!Number.isFinite(rad)) return 0;
   let turns = f32(rad * INV_2PI);
   turns = f32(turns - Math.floor(turns));
   const fp = f32(turns * LUT_SIZE);
@@ -311,9 +271,4 @@ function evalCode(code, ctx) {
 
 function toPayload(name, slot, code) {
   return { abi: ABI, slot, name, code };
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { compile, evalCode, toPayload, tokenize,
-                     CompileError, OP, ABI, MAX_OPS, STACK_MAX };
 }

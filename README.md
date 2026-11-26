@@ -38,30 +38,8 @@ spectrum bars (tested)
 bass bloom (tested)
 .55 + 12*sat(bass*level*.5)*tri(x)
 
-
-To do:
-decrease abrupt changes in color
-explain setup
-High pass filter hardware?
-have default patterns stored on board
-Consider adding OTA so board doesn't need to be flashed by cable
-
-Make the % lable on the sliders 2 px larger. 
-
-Make the "now showing" text on the home page the same lettering as the ✓ patterns loaded message on the custom tab
-
-Change the website background to a gradient from navy to dark gray
-
-
-Adjust the sensitivity of each frequency band by changing the noise floor. The noise floor is volume above which sound is registered. 
-
-Drag a floor to just above that band's "now" reading in a quiet room, or press Calibrate for manual adjustment.
-
-
-Add an addition margin to the per band noise floors.
-
-Raise it if the lights flicker in silence, and lower it if they miss quiet sounds.
-
-
-Set how loud a band must get to reach full strength.
-If the lights flash to full on quiet noise between songs, raise it. If the lights never reach full brightness even on loud music, lower it.
+1. Fill in the CLAUDE.md placeholders. "Build system" still says [Fill in: ...]. Add the framework (Arduino or ESP-IDF) and the environment name from platformio.ini. The "Laptop dev server" line should be a clean command, cd server && node server.js.
+4. Set up the filesystem for data/. uploadfs needs a filesystem partition. Check platformio.ini for board_build.filesystem = littlefs and a partition table that leaves room for it.
+6. Check the web UI files and the server. Make data/ the single source of truth. The laptop server should serve data/ directly, which satisfies the "keep in sync" rule without a second copy.
+7. Keep power in mind. WiFi adds current draw on the ESP32. It shouldn't matter on a 40A LED supply, but WiFi radio activity can cause brief audio noise on the mic's I2S lines. Watch for this when you test.
+8. Open a draft PR into main when you have a first commit. GitHub gave you the link:
