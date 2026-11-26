@@ -87,7 +87,48 @@ const uint16_t BEACON_PORT = 49153;
 const uint32_t BEACON_INTERVAL_MS = 2000;
 static WiFiUDP udp;
 static WiFiUDP beaconUdp;
-static AsyncWebServer server(80);
+
+// HTTP connection cap. Every open TCP connection costs lwIP buffers and AsyncTCP work on core 0, and
+// that work competes with FastLED's RMT interrupt. With many browser pages open the board stalled and
+// the watchdogs reset it. Past this many simultaneous connections a new one is refused straight away
+// (closed before any request is parsed), so a crowd of pages degrades to "some requests fail and the
+// page retries" instead of a reboot loop. 1-4 pages ran clean, and each connection is short-lived
+// (Connection: close), so 6 leaves headroom for bursts without letting the pile-up grow.
+static const uint8_t MAX_HTTP_CLIENTS = 6;
+
+class CappedWebServer : public AsyncWebServer {
+public:
+    explicit CappedWebServer(uint16_t port) : AsyncWebServer(port) {
+        // Replace the base class's onClient handler with one that counts connections.
+        _server.onClient([](void *s, AsyncClient *c) {
+            if (c == nullptr) return;
+            if (liveClients >= MAX_HTTP_CLIENTS) {
+                refused++;
+                c->close(true);
+                c->free();
+                delete c;
+                return;
+            }
+            c->setRxTimeout(3);
+            auto *r = new AsyncWebServerRequest((AsyncWebServer *)s, c);
+            if (r == nullptr) {
+                c->close(true);
+                c->free();
+                delete c;
+                return;
+            }
+            liveClients++;
+            // The request object lives exactly as long as its connection; this fires on close.
+            r->onDisconnect([]() { if (liveClients > 0) liveClients--; });
+        }, this);
+    }
+    static uint8_t liveClients;
+    static uint32_t refused;
+};
+uint8_t  CappedWebServer::liveClients = 0;
+uint32_t CappedWebServer::refused = 0;
+
+static CappedWebServer server(80);
 
 // Binary payload layout matching the PC UDP sender
 struct __attribute__((packed)) AudioPayload {

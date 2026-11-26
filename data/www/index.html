@@ -492,6 +492,30 @@ details.fold>summary:hover{color:var(--fg)!important}
 <script src="presets.js"></script>
 <script src="fastled.js"></script>
 <script>
+// Background pages release the board. Every open page costs the ESP32 TCP connections and CPU, and
+// enough of them made the board reboot. A page that has been hidden for IDLE_MS stops making any
+// request at all (fetch is rejected up front, so no connection is opened), then picks up again the
+// moment the tab is shown. A web page can't close its own tab unless a script opened it, so this
+// also tries window.close() (works for script-opened windows, silently ignored otherwise).
+(function () {
+  const IDLE_MS = 10 * 60 * 1000;
+  let asleep = false, timer = null;
+  const realFetch = window.fetch.bind(window);
+  window.vizAsleep = () => asleep;
+  window.fetch = function (...a) {
+    return asleep ? Promise.reject(new DOMException('page idle', 'AbortError')) : realFetch(...a);
+  };
+  document.addEventListener('visibilitychange', () => {
+    clearTimeout(timer);
+    if (document.hidden) {
+      timer = setTimeout(() => { asleep = true; try { window.close(); } catch (e) {} }, IDLE_MS);
+    } else if (asleep) {
+      asleep = false;   // pollers resume on their next tick and resync the UI
+    }
+  });
+})();
+</script>
+<script>
 const $ = s => document.querySelector(s);
 let code = null;
 
