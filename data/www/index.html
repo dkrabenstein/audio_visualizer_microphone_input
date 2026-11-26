@@ -4,19 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pattern Compiler</title>
+<!-- Only the laptop's Node server serves /host.js (it sets window.VIZ_LAPTOP). The ESP32 has no
+     such file, so there it 404s harmlessly and the page runs in "served by the board" mode. -->
+<script src="/host.js"></script>
 <style>
-:root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#8b90a4;
+:root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#a9aec2;
       --ok:#4ade80;--err:#f87171;--acc:#60a5fa}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
+body{margin:0;background:var(--bg);background:linear-gradient(180deg,#0a1428 0%,#101322 45%,#121317 100%) fixed;min-height:100vh;color:var(--fg);
      font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
 .wrap{max-width:860px;margin:0 auto;padding:20px}
-h1{font-size:16px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
-.sub{color:var(--dim);font-size:12px;margin-bottom:18px}
+h1{font-size:19px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
+.sub{color:var(--dim);font-size:14px;margin-bottom:18px}
 .panel{background:var(--panel);border:1px solid var(--line);
        border-radius:8px;padding:14px;margin-bottom:14px}
-label{display:block;font-size:11px;text-transform:uppercase;
-      letter-spacing:.08em;color:var(--dim);margin-bottom:6px}
+label{display:block;font-size:15px;text-transform:uppercase;
+      letter-spacing:.08em;color:var(--acc);margin-bottom:6px}
 input[type=text]{width:100%;background:#0b0c10;border:1px solid var(--line);
       color:var(--fg);padding:10px;border-radius:5px;font:inherit}
 input[type=text]:focus{outline:none;border-color:var(--acc)}
@@ -31,82 +34,490 @@ button.primary{background:var(--acc);color:#0b0c10;border-color:var(--acc);
        font-weight:600}
 select{background:#0b0c10;border:1px solid var(--line);color:var(--fg);
        padding:8px;border-radius:5px;font:inherit}
-pre{margin:0;font-size:11px;color:var(--dim);max-height:180px;overflow:auto;
-    white-space:pre-wrap}
 .ex{color:var(--acc);cursor:pointer;text-decoration:underline dotted;
     font-size:12px;margin-right:12px;display:inline-block;margin-top:4px}
-.meta{font-size:11px;color:var(--dim);margin-top:8px}
+.meta{font-size:13px;color:var(--dim);margin-top:8px}
+/* --- tabs --- */
+.tabbar{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tabbar button{font-size:15px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
+       background:none;color:var(--dim);padding:8px 16px;margin-bottom:-1px}
+.tabbar button:hover{color:var(--fg);border-color:var(--line)}
+.tabbar button.active{background:var(--panel);color:var(--fg);border-color:var(--line);
+       border-bottom:1px solid var(--panel)}
+.tab{display:none}
+.tab.active{display:block}
+.home p{margin:0 0 10px}
+.home ol{margin:0;padding-left:20px}
+.home li{margin-bottom:6px}
+.home .lead{font-size:15px}
+.cards{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}   /* a short last row (the 7th card) is centred */
+.cards .card{flex:0 1 calc((100% - 28px) / 3);min-width:250px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:10px;cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:var(--acc)}
+.card.active{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.card canvas{height:64px;margin-bottom:8px}
+.card .title{font-weight:600;font-size:13px;margin-bottom:2px;color:var(--acc)}
+.card .blurb{font-size:14px;color:var(--dim)}
+#pat-status{font-size:12px;min-height:18px;margin-bottom:10px}
+#pat-status.ok{color:var(--ok)} #pat-status.err{color:var(--err)}
+#target{font-size:13px}
+#target.ok{color:var(--ok)}
+details.manual{margin-top:10px}
+details.manual summary{cursor:pointer;color:var(--dim);font-size:14px;text-transform:uppercase}
+details.manual[open]>summary{margin-bottom:10px}
+details.manual summary:hover{color:var(--fg)}
+details.opts{margin-top:12px}
+details.opts summary{cursor:pointer;color:var(--dim);font-size:13px}
+details.opts summary:hover{color:var(--fg)}
+.opt{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;
+     font-size:12px;margin-top:10px}
+.opt .h{grid-column:1/-1;margin-top:8px;font-size:11px;text-transform:uppercase;
+        letter-spacing:.08em;color:var(--dim)}
+.opt code{color:var(--acc)}
+.opt span{color:var(--dim)}
+.wheelbox{position:relative;width:280px;height:280px;margin:6px auto 10px}
+.wheelbox canvas{width:280px;height:280px;border-radius:50%;cursor:crosshair;touch-action:none}
+#wheel-swatch{position:absolute;left:50%;top:50%;width:120px;height:120px;
+  margin:-60px 0 0 -60px;border-radius:50%;border:1px solid var(--line);background:#222;
+  pointer-events:none}
+#wheel-marker{position:absolute;width:22px;height:22px;border:3px solid #fff;
+  border-radius:50%;box-shadow:0 0 0 2px #000;transform:translate(-50%,-50%);
+  pointer-events:none;display:none}
+#basic-status{font-size:12px;min-height:18px;text-align:center}
+#basic-status.ok{color:var(--ok)} #basic-status.err{color:var(--err)}
+.rangeRow{display:flex;gap:12px;align-items:center}
+.rangeRow input[type=range]{flex:1;accent-color:var(--acc)}
+button:disabled{opacity:.4;cursor:default}
+.welcome{margin:22px 0 30px}
+.welcome-title{font-size:24px;font-weight:600;line-height:1.3;margin-bottom:8px}
+.welcome-text{font-size:16px;color:var(--dim)}
+.start-title{font-size:16px;font-weight:600;margin-bottom:12px}
+.navcards{display:flex;flex-direction:column;gap:10px}
+.navcard{display:block;width:100%;text-align:left;padding:14px 16px;border-radius:8px;
+         background:var(--panel);border:1px solid var(--line);color:var(--fg);cursor:pointer}
+.navcard:hover,.navcard:focus-visible{border-color:var(--acc);outline:none}
+.navcard .nc-title{display:block;font-weight:600;font-size:16px;margin-bottom:2px;color:var(--acc)}
+.navcard .nc-desc{display:block;font-size:14px;color:var(--dim)}
+#home-bar{height:8px;border-radius:4px;margin:6px 0 0}
+.nowcard{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
+         padding:12px;margin-bottom:26px;border-radius:8px;background:var(--panel);
+         border:1px solid var(--line);color:var(--fg);cursor:pointer}
+.nowcard:hover,.nowcard:focus-visible{border-color:var(--acc);outline:none}
+.nowcard canvas{width:100%;height:40px}
+.now-label{font-size:13px;color:var(--ok)}   /* same lettering and green as the status messages (e.g. patterns loaded) */
+.now-name{font-size:16px;font-weight:600}
+.now-sub{font-size:13px;color:var(--dim)}
+.now-name:empty,.now-sub:empty{display:none}   /* no blank row (and no gap) when there is no text */
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
+.dot.on{background:var(--ok)} .dot.off{background:var(--err)}
+.navcard{display:flex;align-items:center;gap:14px}
+.navcard .nc-text{display:block;flex:1}
+.navcard canvas,.navcard .swatch{flex:none;width:120px;height:36px;border-radius:4px}
+.swatch{display:block;border:1px dashed var(--line);background:transparent}
+.homegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
+#meter{height:90px}
+button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-color:var(--acc);font-weight:600}
+@media (max-width:640px){.homegrid{grid-template-columns:1fr}}
+.briRow input[type=range]{flex:0 1 70%}
+.swbox{flex:1;display:flex;justify-content:center;align-items:center}
+details.fold:not([open])>summary{margin-bottom:0!important}
+.tempslider{-webkit-appearance:none;appearance:none;height:9px;border-radius:4.5px;outline:none;cursor:pointer}
+.tempslider::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--acc);box-shadow:0 0 0 1px #000}
+.tempslider::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--acc)}
+#white-temp{flex:0 1 calc(80% - 56px)}   /* same length as the brightness slider's right end */
+.tempslider.off::-webkit-slider-thumb{border-color:var(--dim);opacity:.75}
+.tempslider.off::-moz-range-thumb{border-color:var(--dim);opacity:.75}
+/* Slider cards (white, brightness): extra room below the slider row so the row, and with it the
+   colour square / Lights on button, sits at the vertical middle of the card. The extra space
+   equals the label's height + margin above the row (the white card already has 8px below it). */
+.panel:has(.swbox){padding-bottom:46px}
+.panel:has(#white-temp){padding-bottom:38px}
+#white-swatch{display:inline-block;width:36px;height:36px;border-radius:6px;border:1px solid var(--line);background:#222;flex:none}
+#white-readout{font-size:14px}
+/* Home page: live sound / quick controls cards */
+#tab-home .homegrid label{font-size:17px}
+#pwr{font-size:15px}
+#home-bri-val{font-size:15px}
+/* All tabs: match the Home page look (label, button, title and status sizes) */
+.tab label{font-size:17px}
+.tab .panel button{font-size:15px}
+#bri-val,#pat-bri-val,#adv-bri-val,#tune-margin-val,#tune-ceil-val,#tune-smooth-val{font-size:15px}
+/* "ADJUST" toggles: same look as the "manual override" toggle (14px, dim, brightens on hover) */
+details.fold>summary{font-size:14px!important;color:var(--dim)!important;letter-spacing:normal!important}
+details.fold>summary:hover{color:var(--fg)!important}
+#tune-box details.fold{margin-bottom:10px}
+#tune-box details.fold>summary{text-transform:uppercase}
+/* Line above each dropdown: brighter, a size up, with a blue bar on its left edge.
+   Note inside each dropdown: dim italic tip. (14px minimum on this tab, so only 1px apart.) */
+#tune-box>.meta:not(#tune-status){color:var(--fg);font-size:15px;border-left:3px solid var(--acc);padding-left:10px}
+#tune-box details>.meta{font-style:italic}
+.card .title{font-size:16px}
+#tab-basic .sub,#tab-patterns .sub{font-size:15px}
+#status,#pat-status,#basic-status,#target,.opt,.ex{font-size:13px}
+#basic-status{font-size:15px}
+/* Setup tab: nothing smaller than 14px (the attribute rule catches the 12px inline styles that the
+   page's script writes into the tuning and strip rows) */
+#tab-setup .meta{font-size:14px}
+#tab-setup :not(summary)[style*="font-size:12px"]{font-size:14px!important}
+#tab-setup #tune-box .rangeRow>span:first-child{min-width:170px!important}   /* room for "band 4 750 Hz–1.4k" at 14px */
+#tab-setup #target{font-size:14px}
+/* Custom tab: nothing smaller than 14px */
+#tab-custom #status,#tab-custom .ex,#tab-custom details.opts summary,#tab-custom .opt,#tab-custom .opt .h{font-size:14px}
+/* Phones: the five tabs and the Setup tab's slider rows were wider than a 390px screen, so the
+   browser zoomed the whole page out. Tighten the tab bar and let slider labels sit above their slider. */
+@media (max-width:560px){
+  .wrap{padding:14px}
+  .tabbar{gap:2px;overflow-x:auto}
+  .tabbar button{font-size:13px;padding:8px 7px;white-space:nowrap}
+  #tab-setup #tune-box .rangeRow{flex-wrap:wrap;row-gap:2px}
+  #tab-setup #tune-box .rangeRow>span:first-child{min-width:0!important;flex:0 0 100%}
+  #tab-setup #tune-box .rangeRow input[type=range]{min-width:0}
+}
+@media (max-width:360px){
+  .tabbar button{font-size:12px;padding:8px 5px}
+  .briRow{gap:8px}
+  .briRow .switch{min-width:72px!important}   /* the on/off button's inline min-width pushed the row past 320px */
+}
 </style>
 </head>
 <body>
+<div class="wrap" style="padding-bottom:0">
+  <div class="tabbar" role="tablist">
+    <button id="btn-home" role="tab" data-tab="home">Home</button>
+    <button id="btn-basic" role="tab" data-tab="basic">Basic</button>
+    <button id="btn-patterns" role="tab" data-tab="patterns">Patterns</button>
+    <button id="btn-custom" role="tab" data-tab="custom">Custom</button>
+    <button id="btn-setup" role="tab" data-tab="setup">Setup</button>
+  </div>
+</div>
+
+<div id="tab-home" class="tab home">
+  <div class="wrap">
+    <h1>AUDIO VISUALIZER</h1>
+    <canvas id="home-bar" width="600" height="8"></canvas>
+
+    <div class="welcome">
+      <div class="welcome-title">Welcome to your home lighting display!</div>
+      <div class="welcome-text">You can adjust the lights to fit whatever you're feeling right now</div>
+    </div>
+
+    <button class="nowcard" id="nowcard" data-go="patterns">
+      <canvas id="now-strip" width="480" height="40"></canvas>
+      <span><span class="dot" id="now-dot"></span><span class="now-label">Now showing</span></span>
+      <span class="now-name" id="now-name">checking the lights&hellip;</span>
+      <span class="now-sub" id="now-sub"></span>
+    </button>
+
+    <div class="start-title">To get started just click on one of the options below</div>
+    <div class="navcards">
+      <button class="navcard" data-go="basic">
+        <span class="nc-text">
+          <span class="nc-title">Basic</span>
+          <span class="nc-desc">Choose a single colour for the lights and set how bright they are.</span>
+        </span>
+        <span class="swatch" id="prev-basic"></span>
+      </button>
+      <button class="navcard" data-go="patterns">
+        <span class="nc-text">
+          <span class="nc-title">Patterns</span>
+          <span class="nc-desc">Pick one of seven lighting patterns that move with the music around you.</span>
+        </span>
+        <canvas id="prev-patterns" width="120" height="36"></canvas>
+      </button>
+      <button class="navcard" data-go="custom">
+        <span class="nc-text">
+          <span class="nc-title">Custom</span>
+          <span class="nc-desc">Make your own pattern: write a formula for the lights and watch a live preview.</span>
+        </span>
+        <canvas id="prev-custom" width="120" height="36"></canvas>
+      </button>
+      <button class="navcard" data-go="setup">
+        <span class="nc-text">
+          <span class="nc-title">Setup</span>
+          <span class="nc-desc">Connect to your board, configure your lights and tune your microphone</span>
+        </span>
+      </button>
+    </div>
+
+    <div class="homegrid">
+      <div class="panel">
+        <label>live sound</label>
+        <canvas id="meter" width="320" height="90"></canvas>
+        <div class="meta" id="meter-src">connecting&hellip;</div>
+      </div>
+      <div class="panel" style="display:flex;flex-direction:column">
+        <label>quick controls</label>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div class="row" style="justify-content:center">
+            <button class="switch" id="pwr" aria-pressed="true">Lights on</button>
+          </div>
+          <div class="rangeRow" style="margin-top:14px">
+            <input id="home-bri" type="range" min="0" max="100" value="100">
+            <span id="home-bri-val" style="min-width:42px;text-align:right">100%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-basic" class="tab">
+  <div class="wrap">
+    <h1>BASIC CONTROLS</h1>
+    <div class="sub">pick a constant colour and change the brightness</div>
+
+    <div class="panel">
+      <label>colour</label>
+      <div class="wheelbox">
+        <canvas id="wheel" width="560" height="560"></canvas>
+        <div id="wheel-swatch"></div>
+        <div id="wheel-marker"></div>
+      </div>
+      <div id="basic-status">choose a colour on the wheel</div>
+    </div>
+
+    <div class="panel">
+      <label>white</label>
+      <div class="rangeRow">
+        <span style="min-width:44px;font-size:15px">warm</span>
+        <input id="white-temp" class="tempslider" type="range" min="2000" max="6500" step="100" value="2700" aria-label="White warmth">
+        <span style="min-width:44px;text-align:right;font-size:15px">cool</span>
+        <span class="swbox"><span id="white-swatch"></span></span>
+        <span id="white-readout" style="display:none"></span>
+      </div>
+      <div id="white-status" class="meta"></div>
+    </div>
+
+    <div class="panel">
+      <label>brightness</label>
+      <div class="rangeRow briRow">
+        <input id="bri" type="range" min="0" max="100" value="100">
+        <span id="bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div class="swbox">
+          <button class="switch" id="pwr-basic" aria-pressed="true" style="min-width:96px">Lights on</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-patterns" class="tab">
+  <div class="wrap">
+    <h1>PATTERNS</h1>
+    <div class="sub">pick a lighting pattern &middot; images show a sample moment of music</div>
+    <div class="panel">
+      <label>brightness</label>
+      <div class="rangeRow briRow">
+        <input id="pat-bri" type="range" min="0" max="100" value="100">
+        <span id="pat-bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div class="swbox">
+          <button class="switch" id="pwr-pat" aria-pressed="true" style="min-width:96px">Lights on</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pat-status"></div>
+    <div class="cards" id="cards"></div>
+  </div>
+</div>
+
+<div id="tab-custom" class="tab">
 <div class="wrap">
-  <h1>PATTERN COMPILER</h1>
-  <div class="sub">expression &rarr; bytecode in this browser &rarr; POST &rarr; flash slot</div>
+  <h1 style="margin-bottom:18px">MAKE YOUR OWN PATTERN</h1>
 
   <div class="panel">
     <label>expression</label>
     <input id="expr" type="text" spellcheck="false"
            value="0.5 + 0.5*sin(tau*x*2 + t) + bass*0.3">
     <div id="status"></div>
-    <div>
-      <span class="ex">0.5+0.5*sin(tau*x*2+t)+bass*0.3</span>
-      <span class="ex">fract(x*4 - t*0.5)</span>
-      <span class="ex">tri(x*2+t*0.2)*0.7 + treb*0.3</span>
-      <span class="ex">sat(band(0)*3)*0.33 + x*0.1</span>
-      <span class="ex">fract(x + i*0.25 + t*0.1)</span>
-    </div>
+    <div id="examples"></div>
+    <details class="opts">
+      <summary>options</summary>
+      <div class="opt">
+        <div class="h">operators</div>
+        <code>+  -  *  /</code><span>add, subtract, multiply, divide (dividing by 0 gives 0)</span>
+        <code>%</code><span>remainder (x % 0 gives 0)</span>
+        <code>^</code><span>power, e.g. x^2 (evaluated before * and /)</span>
+        <code>-x</code><span>negate; also +x</span>
+        <code>( )</code><span>grouping</span>
+
+        <div class="h">inputs</div>
+        <code>x</code><span>position along the strip, 0 (start) to 1 (end)</span>
+        <code>t</code><span>time in seconds</span>
+        <code>i</code><span>strip number: 0, 1, 2, 3</span>
+        <code>level</code><span>overall loudness, 0 to 1</span>
+        <code>bass</code><span>low frequencies, 0 to 1</span>
+        <code>mid</code><span>middle frequencies, 0 to 1</span>
+        <code>treb</code><span>high frequencies, 0 to 1</span>
+        <code>band(n)</code><span>one of 8 frequency bands, n = 0 (lowest) to 7 (highest), 0 to 1; n must be a plain number</span>
+
+        <div class="h">functions</div>
+        <code>sin(a)  cos(a)</code><span>sine and cosine, a in radians</span>
+        <code>abs(a)</code><span>absolute value</span>
+        <code>floor(a)</code><span>round down to a whole number</span>
+        <code>fract(a)</code><span>fractional part, a minus floor(a)</span>
+        <code>sqrt(a)</code><span>square root (negative gives 0)</span>
+        <code>sat(a)</code><span>clamp to 0..1</span>
+        <code>tri(a)</code><span>triangle wave, repeats every 1, ranges 0..1</span>
+        <code>min(a, b)  max(a, b)</code><span>smaller / larger of two values</span>
+        <code>pow(a, b)</code><span>a to the power b</span>
+
+        <div class="h">constants</div>
+        <code>pi  tau  e</code><span>3.14159, 6.28318 (2&middot;pi), 2.71828</span>
+
+        <div class="h">result</div>
+        <code>hue</code><span>the answer wraps around the LED colour wheel: 0 red, 0.125 orange, 0.25 yellow, 0.375 green, 0.5 aqua, 0.625 blue, 0.75 purple, 0.875 pink, 1 red again</span>
+        <code>limit</code><span>at most 64 operations per expression</span>
+      </div>
+    </details>
   </div>
 
   <div class="panel">
-    <label>preview &mdash; strip 0, animated, simulated audio</label>
+    <label>preview</label>
     <canvas id="cv" width="600" height="70"></canvas>
-    <div class="meta" id="perf"></div>
-  </div>
-
-  <div class="panel">
-    <div class="row">
-      <label style="margin:0">slot</label>
-      <select id="slot"></select>
-      <input id="name" type="text" placeholder="name" style="width:160px">
+    <div class="row" style="margin-top:12px;justify-content:center">
       <button class="primary" id="send">Upload &amp; activate</button>
-      <button id="refresh">Refresh</button>
+      <button id="refresh">Refresh Device</button>
     </div>
-    <div class="meta" id="devstat">device: not polled</div>
   </div>
 
   <div class="panel">
-    <label>compiled bytecode</label>
-    <pre id="dis">—</pre>
+      <label>brightness</label>
+      <div class="rangeRow briRow">
+        <input id="adv-bri" type="range" min="0" max="100" value="100">
+        <span id="adv-bri-val" style="min-width:42px;text-align:right">100%</span>
+        <div class="swbox">
+          <button class="switch" id="pwr-adv" aria-pressed="true" style="min-width:96px">Lights on</button>
+        </div>
+      </div>
+    </div>
+
+</div>
+
+</div>
+
+<div id="tab-setup" class="tab">
+<div class="wrap">
+  <h1 style="margin-bottom:18px">CONFIGURE YOUR LIGHTS</h1>
+
+  <div class="panel" id="conn-panel" style="display:none">
+    <label>ESP32 connection</label>
+    <div id="target">searching for ESP32&hellip;</div>
+    <details class="manual">
+      <summary>manual override</summary>
+      <div class="row" style="margin-top:8px">
+        <input id="esp_ip" type="text" value="visualizer.local" style="width:180px">
+        <button id="save_ip">Use this address</button>
+        <button id="auto_ip">Auto-detect</button>
+      </div>
+      <div class="meta">Enter a hostname or IP to pin the board (this turns the beacon off).
+        Auto-detect goes back to the default, where the board's beacon finds it.</div>
+    </details>
   </div>
+
+  <div class="panel">
+    <label>LED strips</label>
+    <div class="meta" style="margin:0 0 12px">Set how many LEDs each strip lights, and which end is the start of a pattern.</div>
+    <details class="fold">
+      <summary style="cursor:pointer;margin-bottom:10px;font-size:12px;letter-spacing:.08em;color:var(--acc)">ADJUST</summary>
+    <div id="strip-rows"></div>
+    </details>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="strip-save">Save to board</button>
+      <button id="strip-reset">Reset defaults</button>
+    </div>
+    <div id="strip-status" class="meta"></div>
+  </div>
+
+  <div class="panel">
+    <label>microphone tuning</label>
+    <div id="tune-box">
+      <div class="meta" style="margin:0 0 6px">Adjust the sensitivity of each frequency band by changing the noise floor.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">individual bands</summary>
+        <div class="meta" style="margin:0 0 10px">The noise floor is volume above which sound is registered. Drag a floor to just above that band's "now" reading in a quiet room, or press Calibrate for automatic adjustment.</div>
+        <div id="tune-rows"></div>
+      </details>
+      <div class="meta" style="margin:0 0 6px">Add an additional margin to the per band noise floors.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">margin</summary>
+        <div class="meta" style="margin:0 0 10px">Raise it if the lights flicker in silence, and lower it if they miss quiet sounds.</div>
+        <div class="rangeRow">
+          <span style="min-width:120px">margin</span>
+          <input id="tune-margin" type="range" min="0" max="15" step="0.5" value="5">
+          <span id="tune-margin-val" style="min-width:64px;text-align:right">5 dB</span>
+        </div>
+      </details>
+      <div class="meta" style="margin:0 0 6px">Set how loud a band must get to reach full strength.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">loudest at least</summary>
+        <div class="meta" style="margin:0 0 10px">If the lights flash to full on quiet noise between songs, raise it. If the lights never reach full brightness even on loud music, lower it.</div>
+        <div class="rangeRow">
+          <span style="min-width:120px">loudest at least</span>
+          <input id="tune-ceil" type="range" min="-80" max="-30" step="1" value="-55">
+          <span id="tune-ceil-val" style="min-width:64px;text-align:right">-55 dB</span>
+        </div>
+      </details>
+      <div class="meta" style="margin:0 0 6px">Choose how quickly the lights follow changes in the sound.</div>
+      <details class="fold">
+        <summary style="cursor:pointer;margin-bottom:10px">smoothness</summary>
+        <div class="meta" style="margin:0 0 10px">Low values react instantly, high values give calmer colour changes.</div>
+        <div class="rangeRow">
+          <span style="min-width:120px">smoothness</span>
+          <input id="tune-smooth" type="range" min="0" max="100" step="1" value="40">
+          <span id="tune-smooth-val" style="min-width:64px;text-align:right">40%</span>
+        </div>
+      </details>
+      <div class="row" style="margin-top:12px">
+        <button id="tune-cal">Calibrate (quiet room)</button>
+        <button class="primary" id="tune-save">Save to board</button>
+        <button id="tune-reset">Reset defaults</button>
+      </div>
+      <div id="tune-status" class="meta"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label>live sound</label>
+    <canvas id="setup-meter" width="640" height="130" style="height:130px"></canvas>
+    <div class="meta" id="setup-meter-src"></div>
+  </div>
+
+</div>
+
 </div>
 
 <script src="compiler.js"></script>
+<script src="presets.js"></script>
+<script src="fastled.js"></script>
+<script>
+// Background pages release the board. Every open page costs the ESP32 TCP connections and CPU, and
+// enough of them made the board reboot. A page that has been hidden for IDLE_MS stops making any
+// request at all (fetch is rejected up front, so no connection is opened), then picks up again the
+// moment the tab is shown. A web page can't close its own tab unless a script opened it, so this
+// also tries window.close() (works for script-opened windows, silently ignored otherwise).
+(function () {
+  const IDLE_MS = 10 * 60 * 1000;
+  let asleep = false, timer = null;
+  const realFetch = window.fetch.bind(window);
+  window.vizAsleep = () => asleep;
+  window.fetch = function (...a) {
+    return asleep ? Promise.reject(new DOMException('page idle', 'AbortError')) : realFetch(...a);
+  };
+  document.addEventListener('visibilitychange', () => {
+    clearTimeout(timer);
+    if (document.hidden) {
+      timer = setTimeout(() => { asleep = true; try { window.close(); } catch (e) {} }, IDLE_MS);
+    } else if (asleep) {
+      asleep = false;   // pollers resume on their next tick and resync the UI
+    }
+  });
+})();
+</script>
 <script>
 const $ = s => document.querySelector(s);
-const NAMES = {0:'CONST',1:'X',2:'T',3:'IDX',4:'BAND',5:'LEVEL',6:'BASS',
-  7:'MID',8:'TREB',16:'ADD',17:'SUB',18:'MUL',19:'DIV',20:'MOD',21:'POW',
-  22:'MIN',23:'MAX',32:'NEG',33:'SIN',34:'COS',35:'ABS',36:'FLOOR',
-  37:'FRACT',38:'SQRT',39:'SAT',40:'TRI'};
-
 let code = null;
-
-for (let i = 0; i < 16; i++) {
-  const o = document.createElement('option');
-  o.value = i; o.textContent = 'slot ' + i;
-  $('#slot').appendChild(o);
-}
-
-function disasm(c) {
-  let depth = 0;
-  return c.map((op, n) => {
-    const [o, a] = op;
-    const pops = o <= 8 ? 0 : (o >= 16 && o <= 23 ? 2 : 1);
-    depth = depth - pops + 1;
-    const arg = a !== undefined ? '  ' + (+a.toFixed(6)) : '';
-    return String(n).padStart(3, '0') + '  ' +
-           NAMES[o].padEnd(6) + arg.padEnd(12) + '; depth ' + depth;
-  }).join('\n');
-}
 
 function build() {
   const src = $('#expr').value;
@@ -115,76 +526,168 @@ function build() {
     $('#status').className = 'ok';
     $('#status').textContent =
       '\u2713 ' + code.length + ' ops, ' + (code.length * 8) + ' bytes';
-    $('#dis').textContent = disasm(code);
   } catch (e) {
     code = null;
     $('#status').className = 'err';
     $('#status').textContent = '\u2717 ' + e.message +
       (e.pos !== undefined ? '  (col ' + (e.pos + 1) + ')' : '');
-    $('#dis').textContent = '—';
   }
 }
 
-// --- preview: runs the SAME bytecode the device will run -------------
+// The Node server resolves the hostname (mDNS) and reports the IP. Device
+// requests use that IP, so the browser doesn't repeat the mDNS lookup.
+let espIp = null;
+// Laptop mode (window.VIZ_LAPTOP, set by the Node server's /host.js): the page is served by the PC,
+// so device requests go to the board's address. On the board there is no espUrl at all: every
+// other script in this page treats "no espUrl" as "served by the board" and uses relative paths.
+const ON_LAPTOP = window.VIZ_LAPTOP === true;
+var espUrl;
+if (ON_LAPTOP) espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
+const apiBase = () => (typeof espUrl === 'function' ? espUrl() : '');
+if (ON_LAPTOP) $('#conn-panel').style.display = '';
+
+const DEFAULT_HOST = 'visualizer.local';
+let lastIp = null;
+
+function showTarget(j) {
+  espIp = j.ip;
+  const el = $('#target');
+  if (!j.ip) {
+    el.className = '';
+    el.textContent = 'searching for ESP32\u2026 (' + j.host +
+      (j.error ? ': ' + j.error : '') + ')';
+  } else {
+    el.className = 'ok';
+    el.textContent = '\u2713 ESP32 found at ' + j.ip +
+      (j.source === 'beacon' ? ' (auto-detected by beacon)'
+       : j.source === 'manual' ? ' (manual address)'
+       : ' (' + j.host + ')');
+  }
+  // A board that moved to a new address has no patterns yet: send them again.
+  if (j.ip && lastIp && j.ip !== lastIp) { uploadPresets(); poll(); }
+  if (j.ip) lastIp = j.ip;
+}
+
+// Ask the Node server what it currently knows. The beacon can change the
+// address at any time (DHCP), so this runs every few seconds.
+async function refreshTarget() {
+  try {
+    const j = await (await fetch('/api/config')).json();
+    if (document.activeElement !== $('#esp_ip')) $('#esp_ip').value = j.host;
+    showTarget(j);
+    return j;
+  } catch (e) {
+    $('#target').className = '';
+    $('#target').textContent = 'dev server unreachable';
+    return null;
+  }
+}
+
+// Point the Node server's UDP stream at a new host or IP.
+async function setTarget(host) {
+  $('#target').className = '';
+  $('#target').textContent = 'resolving ' + host + '\u2026';
+  try {
+    const j = await (await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host })
+    })).json();
+    lastIp = null;      // handled by the explicit upload below
+    showTarget(j);
+  } catch (e) {
+    $('#target').textContent = 'dev server unreachable';
+  }
+  uploadPresets();  // a new target has no presets yet
+}
+
+$('#save_ip').onclick = () => setTarget($('#esp_ip').value.trim());
+$('#auto_ip').onclick = () => { $('#esp_ip').value = DEFAULT_HOST; setTarget(DEFAULT_HOST); };
+
+// Start with whatever the Node server is currently streaming to. Its first
+// lookup may still be running, so retry briefly until an IP comes back.
+if (ON_LAPTOP) (async function loadTarget(tries) {
+  const j = await refreshTarget();
+  if (j && !j.ip && tries > 0) return setTimeout(() => loadTarget(tries - 1), 1000);
+  uploadPresets();
+})(5);
+if (ON_LAPTOP) setInterval(refreshTarget, 3000);
+
+// --- Preview using simulated audio synced from the PC server ---
 const cv = $('#cv'), cx = cv.getContext('2d');
 const N = 150, W = cv.width / N;
-let t0 = performance.now(), acc = 0, samples = 0;
+let t0 = performance.now();
+let liveAudio = { bands: [0,0,0,0,0,0,0,0], level: 0, bass: 0, mid: 0, treb: 0 };
+
+// Only the Custom tab's preview canvas uses liveAudio, so ask for it only while that tab is showing
+// (and the browser tab is visible), 10 times a second, one request at a time. It used to poll 20 times a
+// second on every tab, which is enough extra traffic to make the board's LED output stall.
+let liveBusy = false;
+setInterval(async () => {
+  if (liveBusy || document.hidden || !$('#tab-custom').classList.contains('active')) return;
+  liveBusy = true;
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 1200);
+  try {
+    const res = await fetch('/api/audio', { signal: ctl.signal });
+    liveAudio = await res.json();
+  } catch (e) {}
+  clearTimeout(to);
+  liveBusy = false;
+}, 100);
 
 function frame() {
   const now = performance.now();
   const t = (now - t0) / 1000;
-  cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height);
+  cx.fillStyle = '#000'; 
+  cx.fillRect(0, 0, cv.width, cv.height);
 
   if (code) {
-    // Synthetic audio so the preview shows reactivity without a mic.
-    const bands = [];
-    for (let b = 0; b < 8; b++)
-      bands.push(0.5 + 0.5 * Math.sin(t * (1.3 + b * 0.4) + b));
-    const ctx = { t, i: 0, bands,
-      bass: (bands[0] + bands[1]) / 2,
-      mid: (bands[2] + bands[3] + bands[4]) / 3,
-      treb: (bands[5] + bands[6] + bands[7]) / 3,
-      level: bands.reduce((a, b) => a + b) / 8 };
+    const ctx = {
+      t,
+      i: 0,
+      bands: liveAudio.bands,
+      bass: liveAudio.bass,
+      mid: liveAudio.mid,
+      treb: liveAudio.treb,
+      level: liveAudio.level
+    };
 
-    const s = performance.now();
     for (let p = 0; p < N; p++) {
       ctx.x = p / (N - 1);
       let v = evalCode(code, ctx);
       v = v - Math.floor(v);
-      cx.fillStyle = 'hsl(' + (v * 360) + ',85%,55%)';
+      cx.fillStyle = fastledCss(v);
       cx.fillRect(p * W, 0, W + 1, cv.height);
-    }
-    acc += performance.now() - s; samples++;
-    if (samples >= 60) {
-      $('#perf').textContent =
-        (acc / samples * 1000 / N).toFixed(2) + ' \u00b5s/pixel in this browser \u00b7 ' +
-        N + ' px/frame';
-      acc = 0; samples = 0;
     }
   }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// --- device ----------------------------------------------------------
+// --- Send bytecode directly to ESP32 HTTP Server ---
 $('#send').onclick = async () => {
   if (!code) { $('#status').textContent = '\u2717 fix the expression first'; return; }
-  const slot = +$('#slot').value;
-  const name = $('#name').value || 'untitled';
+  const slot = ADVANCED_SLOT;
+  const name = 'advanced';
+
   try {
-    const r = await fetch('/api/pattern', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const r = await fetch(apiBase() + '/api/pattern', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toPayload(name, slot, code))
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
-    await fetch('/api/select', {
+    
+    await fetch(apiBase() + '/api/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'slot=' + slot });
+      body: 'slot=' + slot 
+    });
+
     $('#status').className = 'ok';
     $('#status').textContent =
-      '\u2713 slot ' + j.slot + ': ' + j.ops + ' ops, depth ' + j.depth;
+      '\u2713 uploaded: ' + j.ops + ' ops, depth ' + j.depth;
     poll();
   } catch (e) {
     $('#status').className = 'err';
@@ -192,25 +695,903 @@ $('#send').onclick = async () => {
   }
 };
 
+let presetHealAt = 0;
 async function poll() {
   try {
-    const j = await (await fetch('/api/slots')).json();
-    const used = j.slots.filter(s => s.used)
-                        .map(s => s.i + ':' + s.name).join('  ');
-    $('#devstat').textContent =
-      'active slot ' + j.active + ' \u00b7 ' + j.fps.toFixed(1) + ' fps \u00b7 ' +
-      j.evalUs + ' \u00b5s/frame in VM \u00b7 ' + (used || 'no slots stored');
+    const j = await (await fetch(apiBase() + '/api/slots')).json();
+    document.dispatchEvent(new CustomEvent('devstate', { detail: j }));
+    // Presets live in the board's RAM, so a reboot or reflash empties them. If the last preset
+    // slot is unused, send them again (slot 0 always holds the firmware default, so it can't be
+    // the test). The cooldown stops a failing upload from re-triggering itself through the
+    // poll() at the end of uploadPresets().
+    const first = (j.slots || []).find(s => s.i === PRESET_FIRST_SLOT + PRESETS.length - 1);
+    if (first && !first.used && Date.now() - presetHealAt > 10000) {
+      presetHealAt = Date.now();
+      uploadPresets();
+    }
   } catch (e) {
-    $('#devstat').textContent = 'device: offline (preview still works)';
+    document.dispatchEvent(new CustomEvent('devoffline'));  // the preview still works
   }
 }
-$('#refresh').onclick = poll;
 
-document.querySelectorAll('.ex').forEach(el => {
-  el.onclick = () => { $('#expr').value = el.textContent; build(); };
+$('#refresh').onclick = poll;
+// Preset links: load an expression into the editor (does not upload it).
+PRESETS.forEach((p, n) => {
+  const el = document.createElement('span');
+  el.className = 'ex';
+  el.textContent = p.name;
+  el.title = p.expr;
+  el.onclick = () => {
+    $('#expr').value = p.expr;
+    build();
+  };
+  $('#examples').appendChild(el);
 });
+
+// Upload every preset to its own slot (PRESET_FIRST_SLOT onward). Only /api/pattern is called, never
+// /api/select, so the running pattern is not interrupted.
+let presetsBusy = false;
+async function uploadPresets() {
+  if (presetsBusy) return;   // overlapping uploads would interleave in the board's request buffer
+  presetsBusy = true;
+  try {
+    for (let n = 0; n < PRESETS.length; n++) {
+      const p = PRESETS[n], slot = PRESET_FIRST_SLOT + n;
+      const r = await fetch(apiBase() + '/api/pattern', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toPayload(p.name, slot, compile(p.expr)))
+      });
+      if (!r.ok) throw new Error(p.name + ': ' + ((await r.json()).error || r.status));
+    }
+    $('#status').className = 'ok';
+    $('#status').textContent = '✓ patterns loaded';
+  } catch (e) {
+    $('#status').className = 'err';
+    $('#status').textContent = '✗ preset upload: ' + e.message;
+  }
+  presetsBusy = false;
+  poll();
+}
+
 $('#expr').addEventListener('input', build);
-build(); poll();
+
+build();
+
+// On the board there is no target discovery step, so load the presets directly. (On the laptop
+// this happens once the PC server has found the board; see loadTarget above.)
+if (!ON_LAPTOP) uploadPresets();
+</script>
+<script>
+// --- tabs -------------------------------------------------------------
+(function () {
+  const tabs = ['home', 'basic', 'patterns', 'custom', 'setup'];
+  function showTab(name) {
+    if (name === 'advanced') name = 'custom';   // old bookmarks
+    if (!tabs.includes(name)) name = 'home';
+    tabs.forEach(function (t) {
+      document.getElementById('tab-' + t).classList.toggle('active', t === name);
+      document.getElementById('btn-' + t).classList.toggle('active', t === name);
+    });
+    try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  }
+  document.querySelectorAll('.tabbar button').forEach(function (b) {
+    b.onclick = function () { showTab(b.dataset.tab); };
+  });
+  document.querySelectorAll('[data-go]').forEach(function (b) {
+    b.onclick = function () { showTab(b.dataset.go); };
+  });
+  showTab(location.hash.slice(1) || 'home');
+})();
+</script>
+<script>
+// --- patterns tab -----------------------------------------------------------
+(function () {
+  // Friendly text for the presets (keyed by preset name in presets.js).
+  var INFO = {
+    audio_reactive: ['Audio Reactive',
+      'The default pattern: a slowly drifting rainbow along the strip whose colours swing with the music. Bass and overall loudness both shift the colours.'],
+    dominant_frequency: ['Dominant Frequency',
+      'One colour for the whole strip that follows the pitch: deep sounds are red, high sounds move round the colour wheel.'],
+    spectrum_hue_shift: ['Spectrum Hue Shift',
+      'A rainbow along the strip. Bass, mid and treble each push the colour in their own part of the strip.'],
+    level_line: ['Level Line',
+      'A bar that grows from the start of the strip with the bass. Blue-to-green inside the bar, red outside.'],
+    level_line_2: ['Level Line 2',
+      'The same bar with a different colour scheme.'],
+    spectrum_bars: ['Spectrum Bars',
+      'Position along the strip is pitch. Each region changes colour as its part of the spectrum gets louder.'],
+    bass_bloom: ['Bass Bloom',
+      'Kick drums make the middle of the strip bloom into a new colour while the ends stay put.']
+  };
+
+  // A fixed, representative moment of music so every image is comparable.
+  var bands = [0.8, 0.6, 0.5, 0.4, 0.3, 0.35, 0.25, 0.15];
+  var sample = {
+    t: 3, i: 0, bands: bands,
+    bass: (bands[0] + bands[1]) / 2,
+    mid: (bands[2] + bands[3] + bands[4]) / 3,
+    treb: (bands[5] + bands[6] + bands[7]) / 3,
+    level: bands.reduce(function (a, b) { return a + b; }) / bands.length
+  };
+
+  function paint(canvas, expr) {
+    var cx = canvas.getContext('2d'), N = 120, w = canvas.width / N;
+    cx.fillStyle = '#000'; cx.fillRect(0, 0, canvas.width, canvas.height);
+    var code;
+    try { code = compile(expr); } catch (e) { return; }
+    for (var p = 0; p < N; p++) {
+      sample.x = p / (N - 1);
+      var v = evalCode(code, sample);
+      v = v - Math.floor(v);
+      cx.fillStyle = fastledCss(v);
+      cx.fillRect(p * w, 0, w + 1, canvas.height);
+    }
+  }
+
+  function status(ok, msg) {
+    var el = document.getElementById('pat-status');
+    el.className = ok ? 'ok' : 'err';
+    el.textContent = msg;
+  }
+
+  function markActive(slot) {
+    document.querySelectorAll('.card').forEach(function (c) {
+      c.classList.toggle('active', +c.dataset.slot === slot);
+    });
+  }
+
+  async function choose(n) {
+    var slot = PRESET_FIRST_SLOT + n;
+    var title = (INFO[PRESETS[n].name] || [PRESETS[n].name])[0];
+    // The laptop page talks to the ESP32 directly (espUrl); the board's own page uses its own address.
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    // One select attempt; resolves to { ok, error } instead of throwing on an HTTP error.
+    async function trySelect() {
+      var r = await fetch(base + '/api/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'slot=' + slot });
+      var j = {};
+      try { j = await r.json(); } catch (e) {}
+      return { ok: r.ok, error: j.error || r.status };
+    }
+    try {
+      var res = await trySelect();
+      // Presets live in the board's RAM, so a reboot or reflash empties them while this page
+      // stays open. The board then rejects the slot as invalid: re-upload the presets, retry once.
+      if (!res.ok && /invalid slot/i.test(String(res.error)) && typeof uploadPresets === 'function') {
+        status(true, 'loading patterns onto the lights\u2026');
+        await uploadPresets();
+        res = await trySelect();
+      }
+      if (!res.ok) throw new Error(res.error);
+      markActive(slot);
+      status(true, '\u2713 now showing: ' + title);
+    } catch (e) {
+      status(false, '\u2717 could not switch pattern: ' + e.message);
+    }
+  }
+
+  var box = document.getElementById('cards');
+  PRESETS.forEach(function (p, n) {
+    var info = INFO[p.name] || [p.name, ''];
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.slot = PRESET_FIRST_SLOT + n;
+    var cv = document.createElement('canvas');
+    cv.width = 360; cv.height = 64;
+    var title = document.createElement('div');
+    title.className = 'title'; title.textContent = info[0];
+    var blurb = document.createElement('div');
+    blurb.className = 'blurb'; blurb.textContent = info[1];
+    card.appendChild(cv); card.appendChild(title); card.appendChild(blurb);
+    card.onclick = function () { choose(n); };
+    box.appendChild(card);
+    paint(cv, p.expr);
+  });
+
+  // Highlight the pattern that is running whenever the device state refreshes.
+  document.addEventListener('devstate', function (e) { markActive(e.detail.active); });
+
+})();
+</script>
+<script>
+// --- basic tab --------------------------------------------------------------
+(function () {
+  var cv = document.getElementById('wheel');
+  var size = cv.width, c = size / 2, outer = c, inner = c * 0.68;
+  var cx = cv.getContext('2d');
+  var img = cx.createImageData(size, size);
+  for (var py = 0; py < size; py++) {
+    for (var px = 0; px < size; px++) {
+      var dx = px + 0.5 - c, dy = py + 0.5 - c;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      var k = (py * size + px) * 4;
+      if (d > outer || d < inner) { img.data[k + 3] = 0; continue; }
+      var deg = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;  // 0 at top, clockwise
+      var rgb = rainbowRGB(Math.min(254, Math.floor(deg / 360 * 255)));
+      img.data[k] = rgb[0]; img.data[k + 1] = rgb[1]; img.data[k + 2] = rgb[2];
+      // soften the two edges of the ring
+      img.data[k + 3] = Math.round(255 * Math.min(1, outer - d, d - inner));
+    }
+  }
+  cx.putImageData(img, 0, 0);
+
+  var marker = document.getElementById('wheel-marker');
+  var swatch = document.getElementById('wheel-swatch');
+  var statusEl = document.getElementById('basic-status');
+
+  function status(cls, msg) { statusEl.className = cls; statusEl.textContent = msg; }
+
+  function show(h) {
+    var rgb = rainbowRGB(h);
+    var col = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    swatch.style.background = col;
+    marker.style.background = col;
+    var css = cv.getBoundingClientRect().width || 280;
+    var rad = css / 2 * (1 + 0.68) / 2;                       // middle of the ring
+    var ang = ((h + 0.5) / 255 * 360 - 90) * Math.PI / 180;
+    marker.style.left = (css / 2 + rad * Math.cos(ang)) + 'px';
+    marker.style.top = (css / 2 + rad * Math.sin(ang)) + 'px';
+    marker.style.display = 'block';
+  }
+
+  // Send "constant hue" to its own slot and switch to it. Only the newest
+  // colour matters while dragging, so requests never pile up.
+  var busy = false, pending = null;
+  async function apply(h) {
+    if (busy) { pending = h; return; }
+    busy = true;
+    // The board does (uint8)(fract(v) * 255), so it can show hues 0..254; the +0.5
+    // keeps float rounding from landing one step low.
+    var expr = String((h + 0.5) / 255);
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    try {
+      var r = await fetch(base + '/api/pattern', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toPayload('basic', BASIC_SLOT, compile(expr)))
+      });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      var r2 = await fetch(base + '/api/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'slot=' + BASIC_SLOT });
+      if (!r2.ok) throw new Error((await r2.json()).error || r2.status);
+      status('ok', '\u2713 lights set to this colour');
+    } catch (e) {
+      status('err', '\u2717 could not reach the lights: ' + e.message);
+    }
+    busy = false;
+    if (pending !== null) { var n = pending; pending = null; apply(n); }
+  }
+
+  function hueAt(ev) {
+    var rect = cv.getBoundingClientRect();
+    var dx = ev.clientX - rect.left - rect.width / 2;
+    var dy = ev.clientY - rect.top - rect.height / 2;
+    var d = Math.sqrt(dx * dx + dy * dy) / (rect.width / 2);
+    if (d < 0.68 - 0.04 || d > 1.04) return null;             // not on the ring
+    var deg = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+    return Math.min(254, Math.floor(deg / 360 * 255));
+  }
+
+  var dragging = false, last = -1;
+  function pick(ev) {
+    var h = hueAt(ev);
+    if (h === null || h === last) return;
+    last = h; show(h); apply(h);
+    window.basicHue = h;
+    try { localStorage.setItem('viz.basicHue', String(h)); } catch (err) {}
+  }
+  cv.addEventListener('pointerdown', function (ev) {
+    if (hueAt(ev) === null) return;
+    dragging = true; cv.setPointerCapture(ev.pointerId); pick(ev);
+  });
+  cv.addEventListener('pointermove', function (ev) { if (dragging) pick(ev); });
+  cv.addEventListener('pointerup', function () { dragging = false; });
+  cv.addEventListener('pointercancel', function () { dragging = false; });
+
+  // Brightness: the control is here, the lights don't use it yet.
+  var bri = document.getElementById('bri'), briVal = document.getElementById('bri-val');
+  bri.addEventListener('input', function () { briVal.textContent = bri.value + '%'; });
+})();
+</script>
+<script>
+// --- home page --------------------------------------------------------------
+(function () {
+  var el = function (id) { return document.getElementById(id); };
+  var home = el('tab-home');
+  var isHome = function () { return home.classList.contains('active') && !document.hidden; };
+
+  function title(name) {
+    return name.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  // ---- compiled expressions for the little previews ----
+  var presetCode = PRESETS.map(function (p) { try { return compile(p.expr); } catch (e) { return null; } });
+  var defaultCode = compile('0.3*x + 0.03*t + bass + 1.5*level');
+  if (typeof window.basicHue !== 'number') {
+    try {
+      var saved = parseInt(localStorage.getItem('viz.basicHue'), 10);
+      if (saved >= 0 && saved <= 254) window.basicHue = saved;
+    } catch (e) {}
+  }
+
+  // ---- audio feed (for the meter and so previews react to real sound) ----
+  var audio = null, live = false, fetching = false;
+  function synth(t) {            // gentle fake audio when nothing is reachable
+    var b = [];
+    for (var k = 0; k < 8; k++) b.push(0.5 + 0.5 * Math.sin(t * (1.3 + k * 0.4) + k));
+    return { bands: b, bass: (b[0] + b[1]) / 2, mid: (b[2] + b[3] + b[4]) / 3,
+             treb: (b[5] + b[6] + b[7]) / 3,
+             level: b.reduce(function (a, c) { return a + c; }) / 8 };
+  }
+  async function getJson(url) {
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok) throw new Error(r.status);
+      return await r.json();
+    } finally { clearTimeout(to); }
+  }
+  async function fetchAudio() {
+    if (fetching || !isHome()) return;
+    fetching = true;
+    var onLaptop = (typeof espUrl === 'function');
+    var base = onLaptop ? espUrl() : '';
+    try {
+      audio = await getJson(base + '/api/audio');
+      live = true;
+      el('meter-src').textContent = '';   // normal case: no subtitle (problems are still reported below)
+    } catch (e) {
+      live = false;
+      var done = false;
+      if (onLaptop) {              // the PC server also streams simulated audio
+        try {
+          audio = await getJson('/api/audio');
+          live = true; done = true;
+          el('meter-src').textContent = 'simulated by the PC (lights not reachable)';
+        } catch (e2) {}
+      }
+      if (!done) el('meter-src').textContent = 'no signal \u2014 lights not reachable';
+    }
+    fetching = false;
+  }
+  setInterval(fetchAudio, 150);
+
+  // ---- device state (running pattern, online or not) ----
+  var dev = { online: null, active: null, white: null };
+  var polling = false;
+  document.addEventListener('devstate', function (e) {
+    dev.online = true; dev.active = e.detail.active; dev.white = e.detail.white || null; renderNow();
+  });
+  document.addEventListener('devoffline', function () { dev.online = false; renderNow(); });
+  setInterval(function () {
+    if (!isHome() || polling) return;
+    polling = true;
+    Promise.resolve(poll()).then(function () { polling = false; }, function () { polling = false; });
+  }, 3000);
+
+  var nowCard = el('nowcard');
+  function presetIndex(slot) {
+    var n = slot - PRESET_FIRST_SLOT;
+    return (n >= 0 && n < PRESETS.length) ? n : -1;
+  }
+  function renderNow() {
+    var name, sub, go = 'patterns', dot = '';
+    if (dev.online === null) {
+      name = 'checking the lights\u2026'; sub = '';
+    } else if (!dev.online) {
+      name = 'Lights not reachable'; dot = 'off';
+      sub = 'check that the board is powered and on your network';
+    } else {
+      dot = 'on'; sub = '';
+      var a = dev.active, n = presetIndex(a);
+      if (dev.white) { name = whiteName(dev.white) + ' (' + dev.white + ' K)'; go = 'basic'; }
+      else if (n >= 0) name = title(PRESETS[n].name);
+      else if (a === BASIC_SLOT) { name = 'Single colour'; go = 'basic'; }
+      else if (a === ADVANCED_SLOT) { name = 'Custom formula'; go = 'custom'; }
+      else name = '';
+    }
+    el('now-name').textContent = name;
+    el('now-sub').textContent = sub;
+    el('now-dot').className = 'dot' + (dot ? ' ' + dot : '');
+    nowCard.dataset.go = go;
+  }
+  renderNow();
+
+  // ---- drawing helpers ----
+  function paintStrip(cv, c, t, a) {
+    var g = cv.getContext('2d'), n = 80, w = cv.width / n;
+    g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+    if (!c) return;
+    var ctx = { t: t, i: 0, bands: a.bands, bass: a.bass, mid: a.mid, treb: a.treb, level: a.level };
+    for (var p = 0; p < n; p++) {
+      ctx.x = p / (n - 1);
+      g.fillStyle = fastledCss(evalCode(c, ctx));
+      g.fillRect(p * w, 0, w + 1, cv.height);
+    }
+  }
+  function paintSolidRGB(cv, c) {
+    var g = cv.getContext('2d');
+    g.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    g.fillRect(0, 0, cv.width, cv.height);
+  }
+  function paintSolid(cv, h) {
+    var g = cv.getContext('2d'), c = rainbowRGB(h);
+    g.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    g.fillRect(0, 0, cv.width, cv.height);
+  }
+  function drawBar(t) {
+    var cv = el('home-bar'), g = cv.getContext('2d'), n = 150, w = cv.width / n;
+    for (var p = 0; p < n; p++) {
+      g.fillStyle = fastledCss(p / (n - 1) * 0.6 + t * 0.04);
+      g.fillRect(p * w, 0, w + 1, cv.height);
+    }
+  }
+  var shown = [0, 0, 0, 0, 0, 0, 0, 0];
+  function drawMeter(a) {
+    var cv = el('meter'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    var n = 8, gap = 10, bw = (W - gap * (n + 1)) / n;
+    for (var i = 0; i < n; i++) {
+      var target = live ? Math.max(0, Math.min(1, a.bands[i] || 0)) : 0;
+      shown[i] += (target - shown[i]) * (target > shown[i] ? 0.5 : 0.15);   // fast up, slow down
+      var h = shown[i] * (H - 8);
+      g.fillStyle = fastledCss(i / 9);
+      g.fillRect(gap + i * (bw + gap), H - 4 - h, bw, Math.max(2, h));
+    }
+  }
+
+  function nowCode() {
+    if (!dev.online) return null;
+    var a = dev.active, n = presetIndex(a);
+    if (n >= 0) return presetCode[n];
+    if (a === ADVANCED_SLOT) return (typeof code !== 'undefined') ? code : null;
+    if (a === BASIC_SLOT || dev.white) return null;   // drawn as a solid colour
+    return defaultCode;
+  }
+
+  function frame(now) {
+    if (isHome()) {
+      var t = now / 1000;
+      var a = (live && audio) ? audio : synth(t);
+
+      drawBar(t);
+
+      var strip = el('now-strip'), hue = window.basicHue;
+      if (dev.online && dev.white) paintSolidRGB(strip, whiteRGB(dev.white));
+      else if (dev.online && dev.active === BASIC_SLOT && typeof hue === 'number') paintSolid(strip, hue);
+      else paintStrip(strip, nowCode(), t, a);
+
+      var sw = el('prev-basic');
+      if (typeof hue === 'number') {
+        var c = rainbowRGB(hue);
+        sw.style.background = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+        sw.style.borderStyle = 'solid';
+      } else { sw.style.background = 'transparent'; sw.style.borderStyle = 'dashed'; }
+
+      var pi = (dev.online && presetIndex(dev.active) >= 0)
+        ? presetIndex(dev.active)
+        : Math.floor(t / 3) % PRESETS.length;     // otherwise flip through them
+      paintStrip(el('prev-patterns'), presetCode[pi], t, a);
+      paintStrip(el('prev-custom'), (typeof code !== 'undefined') ? code : null, t, a);
+
+      drawMeter(a);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- quick controls (UI only for now) ----
+  var switches = ['pwr', 'pwr-basic', 'pwr-pat', 'pwr-adv'];
+  var lastPwrInput = 0, pwrBusy = false, pwrPending = null;
+
+  function setSwitches(on) {
+    switches.forEach(function (o) {
+      el(o).setAttribute('aria-pressed', on ? 'true' : 'false');
+      el(o).textContent = on ? 'Lights on' : 'Lights off';
+    });
+  }
+  async function sendPower(on) {                  // latest value wins, like brightness
+    if (pwrBusy) { pwrPending = on; return; }
+    pwrBusy = true;
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 1500);
+    try {
+      await fetch(base + '/api/power', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'on=' + (on ? '1' : '0') });
+    } catch (e) {}
+    clearTimeout(to);
+    pwrBusy = false;
+    if (pwrPending !== null) { var n = pwrPending; pwrPending = null; sendPower(n); }
+  }
+  switches.forEach(function (id) {                // keep every on/off switch in step
+    el(id).addEventListener('click', function () {
+      var on = el(id).getAttribute('aria-pressed') !== 'true';
+      lastPwrInput = Date.now();
+      setSwitches(on);
+      sendPower(on);
+    });
+  });
+  // Show the board's real state (e.g. after a reload), unless the user just clicked.
+  document.addEventListener('devstate', function (e) {
+    if (typeof e.detail.on === 'boolean' && Date.now() - lastPwrInput > 2000) setSwitches(e.detail.on);
+  });
+  var sliders = ['bri', 'home-bri', 'pat-bri', 'adv-bri'];
+  var lastBriInput = 0, briBusy = false, briPending = null;
+
+  function setSliders(v) {
+    sliders.forEach(function (o) { el(o).value = v; el(o + '-val').textContent = v + '%'; });
+  }
+  // Latest value wins: while a request is in flight only the newest value is kept.
+  async function sendBrightness(v) {
+    if (briBusy) { briPending = v; return; }
+    briBusy = true;
+    var base = (typeof espUrl === 'function') ? espUrl() : '';
+    var ctl = new AbortController();
+    var to = setTimeout(function () { ctl.abort(); }, 1500);
+    try {
+      await fetch(base + '/api/brightness', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'value=' + v });
+    } catch (e) {}
+    clearTimeout(to);
+    briBusy = false;
+    if (briPending !== null) { var n = briPending; briPending = null; sendBrightness(n); }
+  }
+  sliders.forEach(function (id) {                 // keep every brightness slider in step
+    el(id).addEventListener('input', function () {
+      var v = el(id).value;
+      lastBriInput = Date.now();
+      setSliders(v);
+      sendBrightness(v);
+    });
+  });
+  // Show the board's real brightness (e.g. after a reload), unless the user is mid-change.
+  document.addEventListener('devstate', function (e) {
+    var b = e.detail.brightness;
+    if (typeof b === 'number' && Date.now() - lastBriInput > 2000) setSliders(b);
+  });
+})();
+</script>
+<script>
+// ---- microphone tuning (Setup tab) ----
+(function () {
+  var box = document.getElementById('tune-box');
+  if (!box) return;
+  var NAMES = ['47–94 Hz', '141–234 Hz', '234–422 Hz', '422–750 Hz',
+               '750 Hz–1.4k', '1.4–2.8k', '2.8–6.1k', '6.1–14k'];
+  var rows = document.getElementById('tune-rows');
+  var fl = [], nowEl = [], valEl = [];
+  for (var i = 0; i < 8; i++) {
+    var r = document.createElement('div');
+    r.className = 'rangeRow';
+    r.innerHTML = '<span style="min-width:120px">band ' + i + ' <span style="color:var(--dim);font-size:12px">' +
+      NAMES[i] + '</span></span><input type="range" min="-110" max="-40" step="0.5" value="-80">' +
+      '<span style="min-width:64px;text-align:right"></span><span style="min-width:84px;text-align:right;font-size:12px"></span>';
+    rows.appendChild(r);
+    fl.push(r.children[1]); valEl.push(r.children[2]); nowEl.push(r.children[3]);
+  }
+  var margin = document.getElementById('tune-margin'), ceil = document.getElementById('tune-ceil'),
+      smooth = document.getElementById('tune-smooth'), status = document.getElementById('tune-status');
+  var lastEdit = 0, sending = false, pending = false, loaded = false;
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(m, bad) { status.textContent = m; status.style.color = bad ? 'var(--err)' : 'var(--dim)'; }
+  function labels() {
+    for (var i = 0; i < 8; i++) valEl[i].textContent = (+fl[i].value).toFixed(1) + ' dB';
+    document.getElementById('tune-margin-val').textContent = margin.value + ' dB';
+    document.getElementById('tune-ceil-val').textContent = ceil.value + ' dB';
+    document.getElementById('tune-smooth-val').textContent = smooth.value + '%';
+  }
+  async function push() {                       // latest value wins
+    if (sending) { pending = true; return; }
+    sending = true;
+    var body = { floors: fl.map(function (s) { return +s.value; }),
+                 margin: +margin.value, minCeil: +ceil.value, smoothness: +smooth.value };
+    try {
+      var r = await fetch(base() + '/api/tuning', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      say(r.ok ? 'applied (not saved yet)' : 'board rejected the change', !r.ok);
+    } catch (e) { say('lights not reachable', true); }
+    sending = false;
+    if (pending) { pending = false; push(); }
+  }
+  var timer = null;
+  function edited() { lastEdit = Date.now(); labels(); clearTimeout(timer); timer = setTimeout(push, 120); }
+  fl.concat([margin, ceil, smooth]).forEach(function (s) { s.addEventListener('input', edited); });
+
+  async function post(path) { return fetch(base() + path, { method: 'POST' }); }
+  document.getElementById('tune-cal').addEventListener('click', async function () {
+    try { await post('/api/mic/calibrate'); say('calibrating… keep the room quiet for 3 seconds'); lastEdit = 0; loaded = false; }
+    catch (e) { say('lights not reachable', true); }
+  });
+  document.getElementById('tune-save').addEventListener('click', async function () {
+    try { var r = await post('/api/mic/save'); say(r.ok ? 'saved to the board' : 'save failed', !r.ok); }
+    catch (e) { say('lights not reachable', true); }
+  });
+  document.getElementById('tune-reset').addEventListener('click', async function () {
+    try { await post('/api/mic/reset'); loaded = false; say('defaults restored'); }
+    catch (e) { say('lights not reachable', true); }
+  });
+
+  var busy = false;
+  async function refresh() {
+    if (busy) return;
+    var tab = document.getElementById('tab-setup');
+    if (document.hidden || (tab && !tab.classList.contains('active'))) return;
+    var fold = box.closest('details');
+    if (fold && !fold.open) return;     // collapsed
+    busy = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var j = await (await fetch(base() + '/api/tuning', { signal: ctl.signal })).json();
+      var editing = Date.now() - lastEdit < 2000;
+      if ((!editing && !j.calibrating) || !loaded) {
+        for (var i = 0; i < 8; i++) fl[i].value = j.floors[i];
+        margin.value = j.margin; ceil.value = j.minCeil; smooth.value = j.smoothness;
+        labels();
+        loaded = !j.calibrating;
+      }
+      for (var k = 0; k < 8; k++) {
+        var above = j.raw[k] - (+fl[k].value + +margin.value);
+        nowEl[k].textContent = 'now ' + j.raw[k].toFixed(1);
+        nowEl[k].style.color = above > 0 ? 'var(--ok)' : 'var(--dim)';
+      }
+      if (j.calibrating) say('calibrating… keep the room quiet');
+      else if (status.textContent.indexOf('calibrating') === 0) say('calibrated — press Save to board to keep it');
+    } catch (e) { /* offline: leave the last values */ }
+    clearTimeout(to);
+    busy = false;
+  }
+  setInterval(refresh, 400);
+  // The tuning box is not currently inside a <details>, so only attach the listener if it is.
+  var tuneFold = box.closest('details');
+  if (tuneFold) tuneFold.addEventListener('toggle', function () { loaded = false; refresh(); });
+  // Re-read the board's values whenever the Setup tab is opened.
+  document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
+    b.addEventListener('click', function () { loaded = false; setTimeout(refresh, 0); });
+  });
+  labels();
+})();
+</script>
+<script>
+// ---- LED strips (Setup tab) ----
+(function () {
+  var rowsBox = document.getElementById('strip-rows');
+  if (!rowsBox) return;
+  var N = 4, max = 300;
+  var cnt = [], rev = [];
+  for (var i = 0; i < N; i++) {
+    var r = document.createElement('div');
+    r.className = 'rangeRow';
+    r.style.marginBottom = '8px';
+    r.innerHTML = '<span style="min-width:70px">strip ' + i + '</span>' +
+      '<input type="number" min="1" max="300" step="1" value="100" aria-label="LEDs on strip ' + i + '" ' +
+      'style="width:88px;background:#0b0c10;border:1px solid var(--line);color:var(--fg);padding:6px 8px;border-radius:5px;font:inherit">' +
+      '<label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:var(--fg);cursor:pointer">' +
+      '<input type="checkbox" style="accent-color:var(--acc)"> reverse orientation</label>';
+    rowsBox.appendChild(r);
+    cnt.push(r.children[1]); rev.push(r.children[2].querySelector('input'));
+  }
+  var status = document.getElementById('strip-status');
+  var lastEdit = 0, sending = false, pending = false, defaults = null;
+
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(m, bad) { status.textContent = m; status.style.color = bad ? 'var(--err)' : 'var(--dim)'; }
+
+  function fill(j) {
+    max = j.max || max; defaults = j.defaults;
+    for (var i = 0; i < N; i++) {
+      cnt[i].max = max;
+      cnt[i].value = j.counts[i];
+      rev[i].checked = !!j.reversed[i];
+    }
+  }
+
+  async function push() {                       // latest value wins
+    if (sending) { pending = true; return; }
+    sending = true;
+    var body = { counts: cnt.map(function (e) { return parseInt(e.value, 10); }),
+                 reversed: rev.map(function (e) { return e.checked; }) };
+    try {
+      var r = await fetch(base() + '/api/strips', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.ok) say('applied (not saved yet)');
+      else { var j = {}; try { j = await r.json(); } catch (e) {} say(j.error || 'board rejected the change', true); }
+    } catch (e) { say('lights not reachable', true); }
+    sending = false;
+    if (pending) { pending = false; push(); }
+  }
+
+  function edited(input) {
+    lastEdit = Date.now();
+    if (input.type === 'number') {              // only send a sensible whole number
+      var v = Number(input.value);
+      if (!(v >= 1 && v <= max) || Math.floor(v) !== v) { say('enter a whole number from 1 to ' + max, true); return; }
+    }
+    push();
+  }
+  cnt.concat(rev).forEach(function (e) { e.addEventListener('change', function () { edited(e); }); });
+
+  async function post(path) { return fetch(base() + path, { method: 'POST' }); }
+  document.getElementById('strip-save').addEventListener('click', async function () {
+    try { var r = await post('/api/leds/save'); say(r.ok ? 'saved to the board' : 'save failed', !r.ok); }
+    catch (e) { say('lights not reachable', true); }
+  });
+  document.getElementById('strip-reset').addEventListener('click', async function () {
+    try { await post('/api/leds/reset'); lastEdit = 0; say('defaults restored'); refresh(); }
+    catch (e) { say('lights not reachable', true); }
+  });
+
+  var busy = false;
+  async function refresh() {
+    if (busy) return;
+    var tab = document.getElementById('tab-setup');
+    if (tab && !tab.classList.contains('active')) return;
+    var fold = rowsBox.closest('details');
+    if (fold && !fold.open) return;     // collapsed
+    if (Date.now() - lastEdit < 3000 || sending) return;     // don't overwrite what is being typed
+    busy = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var j = await (await fetch(base() + '/api/strips', { signal: ctl.signal })).json();
+      if (cnt.indexOf(document.activeElement) < 0) fill(j);   // not while a count is being typed
+    } catch (e) { /* offline: keep what is shown */ }
+    clearTimeout(to);
+    busy = false;
+  }
+  setInterval(refresh, 2000);
+  rowsBox.closest('details').addEventListener('toggle', function () { lastEdit = 0; refresh(); });
+  document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
+    b.addEventListener('click', function () { lastEdit = 0; setTimeout(refresh, 0); });
+  });
+  setTimeout(refresh, 500);
+})();
+</script>
+<script>
+// ---- live sound bars (Setup tab) ----
+// The same 0..1 band values the lights react to, so tuning changes show up here at once.
+(function () {
+  var cv = document.getElementById('setup-meter');
+  if (!cv) return;
+  var g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  var src = document.getElementById('setup-meter-src');
+  var shown = [0, 0, 0, 0, 0, 0, 0, 0], audio = null, live = false, fetching = false;
+
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function active() {
+    var tab = document.getElementById('tab-setup');
+    return !document.hidden && (!tab || tab.classList.contains('active'));
+  }
+  async function fetchAudio() {
+    if (fetching || !active()) return;
+    fetching = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1200);
+    try {
+      var r = await fetch(base() + '/api/audio', { signal: ctl.signal });
+      if (!r.ok) throw new Error(r.status);
+      audio = await r.json(); live = true; src.textContent = '';
+    } catch (e) { live = false; src.textContent = 'no signal — lights not reachable'; }
+    clearTimeout(to);
+    fetching = false;
+  }
+  setInterval(fetchAudio, 150);
+
+  function draw() {
+    if (active()) {
+      g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+      var n = 8, gap = 14, bw = (W - gap * (n + 1)) / n, top = 8, base0 = H - 22;
+      g.font = '14px ui-monospace, monospace'; g.textAlign = 'center';
+      for (var i = 0; i < n; i++) {
+        var target = (live && audio) ? Math.max(0, Math.min(1, audio.bands[i] || 0)) : 0;
+        shown[i] += (target - shown[i]) * (target > shown[i] ? 0.5 : 0.15);   // fast up, slow down
+        var h = shown[i] * (base0 - top), x = gap + i * (bw + gap);
+        g.fillStyle = (typeof fastledCss === 'function') ? fastledCss(i / 9) : '#60a5fa';
+        g.fillRect(x, base0 - h, bw, Math.max(2, h));
+        g.fillStyle = '#8b90a4';
+        g.fillText('band ' + i, x + bw / 2, H - 6);
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+})();
+</script>
+<script>
+// ---- white light (Basic tab): warm <-> cool slider ----
+(function () {
+  var slider = document.getElementById('white-temp');
+  var swatch = document.getElementById('white-swatch');
+  var readout = document.getElementById('white-readout');
+  var status = document.getElementById('white-status');
+  var lastInput = 0, busy = false, pending = null, active = false, lastSent = null;
+
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(msg, bad) { status.textContent = msg; status.style.color = bad ? 'var(--err)' : 'var(--ok)'; }
+
+  // Track: warm -> cool, painted with the same colour function the lights use.
+  var stops = [];
+  for (var k = WHITE_MIN_K; k <= WHITE_MAX_K; k += 500) stops.push('rgb(' + whiteRGB(k).join(',') + ')');
+  stops.push('rgb(' + whiteRGB(WHITE_MAX_K).join(',') + ')');
+  slider.style.background = 'linear-gradient(to right,' + stops.join(',') + ')';
+
+  // Show the colour for temperature k. `on` = the lights are really showing it.
+  function show(k, on) {
+    swatch.style.background = 'rgb(' + whiteRGB(k).join(',') + ')';
+    swatch.style.opacity = on ? '1' : '0.35';
+    slider.classList.toggle('off', !on);
+    readout.textContent = on ? whiteName(k) + ' · ' + k + ' K'
+                             : 'white is off — move or tap the slider to turn it on';
+  }
+
+  // Latest value wins: only the newest temperature is sent if the board is slow.
+  async function send(k) {
+    if (busy) { pending = k; return; }               // a request is in flight: remember only the newest value
+    if (k === lastSent && active) return;            // the board already shows this
+    lastSent = k;                                    // (set only when really sending)
+    busy = true;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 3000);
+    try {
+      var r = await fetch(base() + '/api/white', { method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'kelvin=' + k });
+      var j = {}; try { j = await r.json(); } catch (e) {}
+      if (r.status === 404) throw new Error('the board needs a firmware update for white');
+      if (!r.ok) throw new Error(j.error || r.status);
+      active = true;
+      say('✓ lights set to ' + whiteName(k).toLowerCase() + ' (' + k + ' K)');
+      if (typeof poll === 'function') poll();
+    } catch (e) {
+      active = false; lastSent = null;
+      show(+slider.value, false);
+      say('✗ could not set white: ' + (e.name === 'AbortError' ? 'the lights did not answer' : e.message), true);
+    }
+    clearTimeout(to);
+    busy = false;
+    if (pending !== null) { var n = pending; pending = null; send(n); }
+  }
+
+  slider.addEventListener('input', function () {
+    lastInput = Date.now();
+    var k = +slider.value;
+    show(k, true);
+    send(k);
+  });
+  // A plain tap on the thumb (no movement) should still turn the white on.
+  slider.addEventListener('pointerup', function () { lastInput = Date.now(); if (!active) { show(+slider.value, true); send(+slider.value); } });
+  slider.addEventListener('keyup', function () { if (!active) { show(+slider.value, true); send(+slider.value); } });
+
+  // Keep the slider in step with what the board is really showing: choosing a colour, a pattern
+  // or a custom formula switches the white off on the board.
+  function sync(white) {
+    if (Date.now() - lastInput < 2500 || busy) return;   // don't fight a drag in progress
+    if (white) { active = true; lastSent = white; slider.value = white; show(+slider.value, true); }
+    else {
+      active = false; lastSent = null; show(+slider.value, false);
+      if (status.textContent.indexOf('set to') > 0) status.textContent = '';
+    }
+  }
+  document.addEventListener('devstate', function (e) { sync(e.detail.white || null); });
+  async function refresh() {
+    var tab = document.getElementById('tab-basic');
+    if (!tab || !tab.classList.contains('active') || busy) return;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 1500);
+    try { var j = await (await fetch(base() + '/api/slots', { signal: ctl.signal })).json(); sync(j.white || null); }
+    catch (e) { /* offline: keep what is shown */ }
+    clearTimeout(to);
+  }
+  setInterval(refresh, 3000);
+  document.querySelectorAll('[data-tab="basic"], [data-go="basic"]').forEach(function (b) {
+    b.addEventListener('click', function () { setTimeout(refresh, 0); });
+  });
+  show(+slider.value, false);
+  setTimeout(refresh, 600);
+})();
 </script>
 </body>
 </html>

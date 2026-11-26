@@ -1,0 +1,9 @@
+# Normalize line endings: text files are stored with LF in the repo.
+* text=auto
+
+# Binary files: never convert.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.bin binary
