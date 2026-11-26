@@ -13,8 +13,8 @@ Interim: while the ESP32 web UI is in development, the same page is hosted on th
 ## Repository layout
 
 - `src/`: ESP32 firmware. Contains the LED rendering, the signal source (currently noise, later microphone), and the algorithm selection logic.
-- `data/`: Web UI files meant to be served from the ESP32's filesystem. Uploaded with `pio run -t uploadfs`.
-- `server/`: Development web server that runs on the laptop and serves the same UI from `data/` (or a copy of it) for testing.
+- `data/`: The web UI (`data/www/`), the single source of truth. Served from the ESP32's filesystem (upload with `pio run -t uploadfs`) and by the laptop server.
+- `server/`: Development web server that runs on the laptop and serves `data/www/` directly (no second copy). It also streams simulated audio to the board and serves `/host.js`, which switches the page into laptop mode (shows the ESP32 connection panel).
 - `tools/`: Standalone, working LED algorithms that do not depend on the website. Treat these as the reference implementations for the lighting behavior.
 - `platformio.ini`: Build environments and library dependencies.
 
@@ -27,6 +27,8 @@ LED row 1: 100 LEDs, pin 5
 LED row 1: 180 LEDs, pin 6
 LED row 1: 101 LEDs, pin 7
 40A, 5V power supply
+
+Strip lengths are configurable at runtime. A test configuration of {60, 1, 1, 1} LEDs (one short strip, the other three at one LED each) is used during development and is a valid configuration, not a misconfiguration.
 
 - Microphone: on the PCB. I2S, DMM-4026-B-I2S-EB-R, pins:
 SCK 15
@@ -63,4 +65,3 @@ SD  18
 
 - Replace artificial noise signals with microphone input.
 - Build the ESP32-hosted web page that selects the active algorithm.
-- Define how the web UI talks to the firmware (for example HTTP endpoints or WebSocket) and keep it the same for the laptop server and the ESP32.

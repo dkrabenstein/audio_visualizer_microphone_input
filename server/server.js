@@ -15,6 +15,9 @@ const net = require('net');
 let ESP32_HOST = process.argv[2] || 'visualizer.local';
 const UDP_PORT = 49152;
 const HTTP_PORT = 3000;
+// The web UI lives in data/www (flashed to the ESP32 with `pio run -t uploadfs`) and is served from
+// there here too, so the laptop and the board always show the same page.
+const WEB_ROOT = path.resolve(__dirname, '..', 'data', 'www');
 const RESOLVE_INTERVAL_MS = 30000;
 
 // --- Host resolution ---
@@ -177,8 +180,22 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Serve static files from /public
-  let filePath = path.join(__dirname, 'public', req.url === '/' ? 'index.html' : req.url);
+  // Tells the page it is being served by the laptop (the ESP32 has no /host.js), which switches on
+  // the ESP32-connection panel and routes device requests to the board's address.
+  if (req.method === 'GET' && req.url === '/host.js') {
+    res.writeHead(200, { 'Content-Type': 'application/javascript' });
+    return res.end('window.VIZ_LAPTOP = true;\n' +
+                   "document.title = 'Pattern Compiler (Node.js PC Host)';\n");
+  }
+
+  // Serve the web UI straight from data/www, the same files the ESP32 serves, so there is a
+  // single copy. The path is checked to stay inside that folder.
+  const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  const filePath = path.join(WEB_ROOT, urlPath === '/' ? 'index.html' : urlPath);
+  if (!filePath.startsWith(WEB_ROOT + path.sep)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    return res.end('Forbidden');
+  }
   const ext = path.extname(filePath);
   const mimeTypes = {
     '.html': 'text/html',

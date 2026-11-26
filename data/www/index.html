@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pattern Compiler (Node.js PC Host)</title>
+<title>Pattern Compiler</title>
+<!-- Only the laptop's Node server serves /host.js (it sets window.VIZ_LAPTOP). The ESP32 has no
+     such file, so there it 404s harmlessly and the page runs in "served by the board" mode. -->
+<script src="/host.js"></script>
 <style>
 :root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#a9aec2;
       --ok:#4ade80;--err:#f87171;--acc:#60a5fa}
@@ -161,6 +164,21 @@ details.fold>summary:hover{color:var(--fg)!important}
 #tab-setup #target{font-size:14px}
 /* Custom tab: nothing smaller than 14px */
 #tab-custom #status,#tab-custom .ex,#tab-custom details.opts summary,#tab-custom .opt,#tab-custom .opt .h{font-size:14px}
+/* Phones: the five tabs and the Setup tab's slider rows were wider than a 390px screen, so the
+   browser zoomed the whole page out. Tighten the tab bar and let slider labels sit above their slider. */
+@media (max-width:560px){
+  .wrap{padding:14px}
+  .tabbar{gap:2px;overflow-x:auto}
+  .tabbar button{font-size:13px;padding:8px 7px;white-space:nowrap}
+  #tab-setup #tune-box .rangeRow{flex-wrap:wrap;row-gap:2px}
+  #tab-setup #tune-box .rangeRow>span:first-child{min-width:0!important;flex:0 0 100%}
+  #tab-setup #tune-box .rangeRow input[type=range]{min-width:0}
+}
+@media (max-width:360px){
+  .tabbar button{font-size:12px;padding:8px 5px}
+  .briRow{gap:8px}
+  .briRow .switch{min-width:72px!important}   /* the on/off button's inline min-width pushed the row past 320px */
+}
 </style>
 </head>
 <body>
@@ -383,7 +401,7 @@ details.fold>summary:hover{color:var(--fg)!important}
 <div class="wrap">
   <h1 style="margin-bottom:18px">CONFIGURE YOUR LIGHTS</h1>
 
-  <div class="panel">
+  <div class="panel" id="conn-panel" style="display:none">
     <label>ESP32 connection</label>
     <div id="target">searching for ESP32&hellip;</div>
     <details class="manual">
@@ -495,7 +513,14 @@ function build() {
 // The Node server resolves the hostname (mDNS) and reports the IP. Device
 // requests use that IP, so the browser doesn't repeat the mDNS lookup.
 let espIp = null;
-const espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
+// Laptop mode (window.VIZ_LAPTOP, set by the Node server's /host.js): the page is served by the PC,
+// so device requests go to the board's address. On the board there is no espUrl at all: every
+// other script in this page treats "no espUrl" as "served by the board" and uses relative paths.
+const ON_LAPTOP = window.VIZ_LAPTOP === true;
+var espUrl;
+if (ON_LAPTOP) espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
+const apiBase = () => (typeof espUrl === 'function' ? espUrl() : '');
+if (ON_LAPTOP) $('#conn-panel').style.display = '';
 
 const DEFAULT_HOST = 'visualizer.local';
 let lastIp = null;
@@ -557,12 +582,12 @@ $('#auto_ip').onclick = () => { $('#esp_ip').value = DEFAULT_HOST; setTarget(DEF
 
 // Start with whatever the Node server is currently streaming to. Its first
 // lookup may still be running, so retry briefly until an IP comes back.
-(async function loadTarget(tries) {
+if (ON_LAPTOP) (async function loadTarget(tries) {
   const j = await refreshTarget();
   if (j && !j.ip && tries > 0) return setTimeout(() => loadTarget(tries - 1), 1000);
   uploadPresets();
 })(5);
-setInterval(refreshTarget, 3000);
+if (ON_LAPTOP) setInterval(refreshTarget, 3000);
 
 // --- Preview using simulated audio synced from the PC server ---
 const cv = $('#cv'), cx = cv.getContext('2d');
@@ -570,12 +595,21 @@ const N = 150, W = cv.width / N;
 let t0 = performance.now();
 let liveAudio = { bands: [0,0,0,0,0,0,0,0], level: 0, bass: 0, mid: 0, treb: 0 };
 
+// Only the Custom tab's preview canvas uses liveAudio, so ask for it only while that tab is showing
+// (and the browser tab is visible), 10 times a second, one request at a time. It used to poll 20 times a
+// second on every tab, which is enough extra traffic to make the board's LED output stall.
+let liveBusy = false;
 setInterval(async () => {
+  if (liveBusy || document.hidden || !$('#tab-custom').classList.contains('active')) return;
+  liveBusy = true;
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 1200);
   try {
-    const res = await fetch('/api/audio');
+    const res = await fetch('/api/audio', { signal: ctl.signal });
     liveAudio = await res.json();
   } catch (e) {}
-}, 50);
+  clearTimeout(to);
+  liveBusy = false;
+}, 100);
 
 function frame() {
   const now = performance.now();
@@ -613,7 +647,7 @@ $('#send').onclick = async () => {
   const name = 'advanced';
 
   try {
-    const r = await fetch(espUrl() + '/api/pattern', {
+    const r = await fetch(apiBase() + '/api/pattern', {
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toPayload(name, slot, code))
@@ -621,7 +655,7 @@ $('#send').onclick = async () => {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     
-    await fetch(espUrl() + '/api/select', {
+    await fetch(apiBase() + '/api/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'slot=' + slot 
@@ -640,7 +674,7 @@ $('#send').onclick = async () => {
 let presetHealAt = 0;
 async function poll() {
   try {
-    const j = await (await fetch(espUrl() + '/api/slots')).json();
+    const j = await (await fetch(apiBase() + '/api/slots')).json();
     document.dispatchEvent(new CustomEvent('devstate', { detail: j }));
     // Presets live in the board's RAM, so a reboot or reflash empties them. If the last preset
     // slot is unused, send them again (slot 0 always holds the firmware default, so it can't be
@@ -679,7 +713,7 @@ async function uploadPresets() {
   try {
     for (let n = 0; n < PRESETS.length; n++) {
       const p = PRESETS[n], slot = PRESET_FIRST_SLOT + n;
-      const r = await fetch(espUrl() + '/api/pattern', {
+      const r = await fetch(apiBase() + '/api/pattern', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(toPayload(p.name, slot, compile(p.expr)))
       });
@@ -698,6 +732,10 @@ async function uploadPresets() {
 $('#expr').addEventListener('input', build);
 
 build();
+
+// On the board there is no target discovery step, so load the presets directly. (On the laptop
+// this happens once the PC server has found the board; see loadTarget above.)
+if (!ON_LAPTOP) uploadPresets();
 </script>
 <script>
 // --- tabs -------------------------------------------------------------
@@ -1262,7 +1300,7 @@ build();
   async function refresh() {
     if (busy) return;
     var tab = document.getElementById('tab-setup');
-    if (tab && !tab.classList.contains('active')) return;
+    if (document.hidden || (tab && !tab.classList.contains('active'))) return;
     var fold = box.closest('details');
     if (fold && !fold.open) return;     // collapsed
     busy = true;
@@ -1288,7 +1326,9 @@ build();
     busy = false;
   }
   setInterval(refresh, 400);
-  box.closest('details').addEventListener('toggle', function () { loaded = false; refresh(); });
+  // The tuning box is not currently inside a <details>, so only attach the listener if it is.
+  var tuneFold = box.closest('details');
+  if (tuneFold) tuneFold.addEventListener('toggle', function () { loaded = false; refresh(); });
   // Re-read the board's values whenever the Setup tab is opened.
   document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
     b.addEventListener('click', function () { loaded = false; setTimeout(refresh, 0); });
@@ -1403,7 +1443,7 @@ build();
   function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
   function active() {
     var tab = document.getElementById('tab-setup');
-    return !tab || tab.classList.contains('active');
+    return !document.hidden && (!tab || tab.classList.contains('active'));
   }
   async function fetchAudio() {
     if (fetching || !active()) return;

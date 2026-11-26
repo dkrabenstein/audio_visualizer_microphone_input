@@ -7,6 +7,9 @@
 # How it works
 # Background
 # Known Issues and Limitations
+- decrease board's footprint
+- move microphone to outside
+- add circuit protection for level shifter
 # Hardware
 # Features
 # Performance Metrics
@@ -38,8 +41,26 @@ spectrum bars (tested)
 bass bloom (tested)
 .55 + 12*sat(bass*level*.5)*tri(x)
 
-1. Fill in the CLAUDE.md placeholders. "Build system" still says [Fill in: ...]. Add the framework (Arduino or ESP-IDF) and the environment name from platformio.ini. The "Laptop dev server" line should be a clean command, cd server && node server.js.
-4. Set up the filesystem for data/. uploadfs needs a filesystem partition. Check platformio.ini for board_build.filesystem = littlefs and a partition table that leaves room for it.
-6. Check the web UI files and the server. Make data/ the single source of truth. The laptop server should serve data/ directly, which satisfies the "keep in sync" rule without a second copy.
-7. Keep power in mind. WiFi adds current draw on the ESP32. It shouldn't matter on a 40A LED supply, but WiFi radio activity can cause brief audio noise on the mic's I2S lines. Watch for this when you test.
-8. Open a draft PR into main when you have a first commit. GitHub gave you the link:
+3. After that, look at the FastLED RMT stall itself, for example a newer FastLED or a different RMT setting. That's a firmware experiment, so I'd do it separately.
+- Router IP reservation: I recommended it, but I haven't set it up.
+- OTA password: it's printed in espota's debug output, so you may want to change it.
+- ask about current functionallity
+- ask about refactoring
+- ask about resume portfolio viability
+
+What's done
+- Polling fix: on the Custom tab, the preview now polls /api/audio at 10 Hz. Before, it polled at 20 Hz on every tab. It also pauses when the browser tab is hidden. The Setup-tab meter and tuning pollers pause when hidden too. Requests per second for one open page are now Home 7 (was 25), Basic 0.3 (was 20), Patterns 0 (was 20), Custom 10 (was 20), Setup 8 (was 29).
+- Phone layout: the page is now exactly 390 px wide on every tab, and 360 px on a 360 px screen. At 320 px, Basic is 2 px wider than the screen. The five tabs fit, and the Setup slider labels sit above their sliders.
+- Re-test: the phone and desktop click-throughs now pass every functional check. The two remaining "failures" are the harmless host.js and favicon 404s.
+- On the board: all of this was flashed with uploadfs.
+
+What the polling fix doesn't solve
+- The board still crashes with 6 or more real pages open at once. With 6 pages on Custom and 10 on
+  Home it hit render stalls, interrupt-watchdog panics, one lwIP assertion failure and a
+  task-watchdog abort. It recovered each time, but it reboots in a loop.
+- With 1–4 real pages open (200 seconds, including 4 on Setup) there were no failures and no        reboots.                                                                                     Request rate alone doesn't explain it, so I think it's the number of simultaneous connections,    plus every page re-uploading the presets on load. I haven't proven that.                     The panic backtraces point into FastLED's RMT interrupt handler, so the underlying problem is in
+  the firmware, not the page. I'd look at that separately.                                                                                                                                       t verified
+- Settings after the crash storms: I haven't re-checked that your strips, mic tuning and brightness still match the snapshot since the last six-page test. They did before it, and the tuning is saved in flash. It's a quick check at /api/tuning and /api/strips if you want to confirm.
+- Leftover processes: a few headless Chrome, Node or Python processes from my tests may still be  running. Check Task Manager if the laptop feels slow.
+- Unexplained reboot: one reboot happened during an earlier desktop test with a single page open. It didn't repeat on the rerun.
+- Commit: nothing is committed. data/www/index.html has all the changes, and the test scripts and snapshot are in the scratchpad.
