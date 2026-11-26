@@ -45,6 +45,15 @@ bass bloom (tested)
 
 - ask about current functionallity
 Is there any additional functionallity that would be worth adding?
+2. Wi-Fi setup without reflashing. The SSID and password are compiled in from secrets.h. A fallback access point with a small setup page would let you move the board to another network or hand it to someone else. It's also a strong portfolio feature.
+3. A diagnostics panel. Show uptime, reset reason, free heap, Wi-Fi signal strength and the refused-connection count. The reset reason would have told us about the panics without a USB cable. It's cheap to add as an /api/status endpoint plus a section on the Setup tab.
+4. Basic API protection. The API allows any origin (Access-Control-Allow-Origin: *) and every POST is open to anyone on your network. A simple shared token would stop a stray page or device from changing your lights. The OTA path is already password-protected, so the web API is the weaker spot.
+
+- Beat or tempo detection. You already have per-band energy, so a beat pulse for patterns to use is a natural next feature.
+- WebSocket or server-sent events instead of polling. One connection per page would replace repeated requests, which helps the connection limit we just hit.
+- Per-strip patterns. Let each of the four strips run a different pattern, or mirror one.
+
+
 - ask about adding tests
 Are there any more tests that should be run?
 Are there any tests that should be put in the tests directory
