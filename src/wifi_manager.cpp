@@ -1,6 +1,7 @@
 // wifi_manager.cpp -- see wifi_manager.h
 
 #include "wifi_manager.h"
+#include "json_body.h"
 
 #include <WiFi.h>
 #include <DNSServer.h>
@@ -373,7 +374,7 @@ void wifi_manager_register_routes(AsyncWebServer &server) {
     // POST /api/wifi  JSON {ssid, password}. Answers at once; the board then tests the network in
     // the background. Poll GET /api/wifi for "trying" -> "connected" (or back to "ap" with an error).
     server.on("/api/wifi", HTTP_POST,
-              [](AsyncWebServerRequest *r) {}, nullptr,
+              reject_empty_body, nullptr,
               [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
         static String buf;
         if (index == 0) buf = "";

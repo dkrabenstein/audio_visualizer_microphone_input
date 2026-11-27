@@ -5,6 +5,8 @@
 //   -> 8 log-spaced bands -> dB -> adaptive 0..1 mapping -> attack/decay smoothing
 
 #include "audio_source.h"
+#include "audio_math.h"
+#include "audio_dsp.h"
 #include "pins.h"
 
 #include <Arduino.h>
@@ -15,21 +17,14 @@
 
 // ---------------------------------------------------------------- Config
 #define I2S_PORT      I2S_NUM_0
-#define SAMPLE_RATE   48000     // same rate as the working tools/ mic sketches
-#define FFT_N         1024      // bin width = 48000/1024 = 46.9 Hz
-#define HOP_N         512       // new samples per FFT -> ~94 spectra/second
+// SAMPLE_RATE, FFT_N, HOP_N, HPF_HZ and BAND_EDGES live in audio_dsp.h
 #define DMA_BUF_LEN   256
 #define DMA_BUF_COUNT 8         // ~42 ms of headroom
-
-// Band edges as FFT bin indices (bin k = k * 46.9 Hz). Roughly one band per
-// octave-ish: 47-141, 141-234, 234-422, 422-750, 750-1.4k, 1.4-2.8k, 2.8-6.1k, 6.1-14k Hz
-static const uint16_t BAND_EDGES[9] = { 1, 3, 5, 9, 16, 30, 60, 130, 300 };
 
 // Level mapping, in dBFS (0 dB = full-scale sine).
 // The top of the window follows the loudest band (fast up, slow down) so quiet
 // rooms and loud rooms both use the full 0..1 range. The bottom of the window is a
 // per-band noise floor table (tunable, see AudioTuning).
-#define MIN_RANGE_DB  (12.0f)   // smallest ceiling-to-floor span, avoids divide-by-~0
 #define CEIL_FALL_DB  (0.02f)   // dB the ceiling drops per spectrum (~2 dB/s)
 
 // Per-band noise floor: a fixed table (AudioTuning::floorDb) set from the web UI,
@@ -50,7 +45,6 @@ static const AudioTuning TUNE_DEFAULT = {
 // into FFT bin 1 and pins band 0 near full scale. A one-pole running average
 // (corner ~7 Hz at 48 kHz, well below the lowest band) is subtracted per sample.
 #define DC_ALPHA      0.001f    // diagnostic DC tracker only
-#define HPF_HZ        90.0f     // 2nd-order high-pass corner (below band 0 start of ~94 Hz)
 // Time smoothing of each band's 0..1 value (see AudioTuning::smoothness). The value
 // follows its target with a fast attack and a slower release. Both are time constants
 // in milliseconds, so the feel does not depend on how often spectra arrive:
@@ -69,10 +63,8 @@ static portMUX_TYPE    g_featMux = portMUX_INITIALIZER_UNLOCKED;
 
 static int32_t g_i2sBuf[DMA_BUF_LEN];
 static float   g_ring[FFT_N];         // most recent FFT_N samples, oldest first
-static float   g_re[FFT_N], g_im[FFT_N];
-static float   g_window[FFT_N];
-static float   g_cos[FFT_N / 2], g_sin[FFT_N / 2];
-static uint16_t g_bitrev[FFT_N];
+static AudioFft  g_fft;               // window, twiddles and work buffers (audio_dsp.h)
+static HighPass  g_hp;                // 90 Hz 2nd-order high-pass (audio_dsp.h)
 
 static AudioTuning g_tune = TUNE_DEFAULT;      // guarded by g_featMux
 static float g_rawDb[8] = { -120, -120, -120, -120, -120, -120, -120, -120 };  // guarded by g_featMux
@@ -82,87 +74,11 @@ static float g_smooth[8] = {0};
 static float g_dc = 0.0f;           // running DC estimate (full-scale units)
 static bool  g_dcSeeded = false;
 
-// ---------------------------------------------------------------- High-pass
-// 2nd-order Butterworth high-pass (12 dB/oct), transposed direct form II.
-// Replaces the old one-pole DC remover: removes DC and infrasonic/rumble energy
-// that leaked into FFT bins 1-2 and inflated band 0.
-static float g_hpB0, g_hpB1, g_hpB2, g_hpA1, g_hpA2;
-static float g_hpZ1 = 0.0f, g_hpZ2 = 0.0f;
-
-static void hp_init() {
-    const float w0 = 2.0f * PI * HPF_HZ / SAMPLE_RATE;
-    const float c = cosf(w0), alpha = sinf(w0) / (2.0f * 0.70710678f);
-    const float a0 = 1.0f + alpha;
-    g_hpB0 = (1.0f + c) * 0.5f / a0;
-    g_hpB1 = -(1.0f + c) / a0;
-    g_hpB2 = g_hpB0;
-    g_hpA1 = -2.0f * c / a0;
-    g_hpA2 = (1.0f - alpha) / a0;
-}
-
-static inline float hp_process(float x) {
-    const float y = g_hpB0 * x + g_hpZ1;
-    g_hpZ1 = g_hpB1 * x - g_hpA1 * y + g_hpZ2;
-    g_hpZ2 = g_hpB2 * x - g_hpA2 * y;
-    return y;
-}
-
-// ---------------------------------------------------------------- FFT
-static void fft_init() {
-    const int bits = 10;  // log2(FFT_N)
-    for (int i = 0; i < FFT_N; i++) {
-        // Hann window: removes the spectral leakage a hard-edged block would cause.
-        g_window[i] = 0.5f - 0.5f * cosf(2.0f * PI * i / (FFT_N - 1));
-        uint16_t r = 0;
-        for (int b = 0; b < bits; b++) if (i & (1 << b)) r |= 1 << (bits - 1 - b);
-        g_bitrev[i] = r;
-    }
-    for (int i = 0; i < FFT_N / 2; i++) {
-        g_cos[i] = cosf(2.0f * PI * i / FFT_N);
-        g_sin[i] = -sinf(2.0f * PI * i / FFT_N);
-    }
-}
-
-// In-place iterative radix-2 FFT on g_re/g_im (input already bit-reversed).
-static void fft_run() {
-    for (int len = 2; len <= FFT_N; len <<= 1) {
-        const int half = len >> 1;
-        const int step = FFT_N / len;
-        for (int i = 0; i < FFT_N; i += len) {
-            for (int j = 0, k = 0; j < half; j++, k += step) {
-                const int a = i + j, b = a + half;
-                const float tr = g_re[b] * g_cos[k] - g_im[b] * g_sin[k];
-                const float ti = g_re[b] * g_sin[k] + g_im[b] * g_cos[k];
-                g_re[b] = g_re[a] - tr;  g_im[b] = g_im[a] - ti;
-                g_re[a] += tr;           g_im[a] += ti;
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------- Analysis
 static void analyse_block() {
-    // Window + bit-reverse copy.
-    for (int i = 0; i < FFT_N; i++) {
-        g_re[g_bitrev[i]] = g_ring[i] * g_window[i];
-        g_im[g_bitrev[i]] = 0.0f;
-    }
-    fft_run();
-
-    // Scale so a full-scale sine reads 1.0 in its bin (Hann coherent gain = 0.5).
-    const float norm = 4.0f / FFT_N;
-
+    // Window, FFT and the 8 band levels in dBFS (see audio_dsp.h).
     float db[8];
-    float loudest = -120.0f;
-    for (int b = 0; b < 8; b++) {
-        float peak = 0.0f;
-        for (int k = BAND_EDGES[b]; k < BAND_EDGES[b + 1]; k++) {
-            const float m = sqrtf(g_re[k] * g_re[k] + g_im[k] * g_im[k]) * norm;
-            if (m > peak) peak = m;
-        }
-        db[b] = 20.0f * log10f(peak + 1e-9f);
-        if (db[b] > loudest) loudest = db[b];
-    }
+    const float loudest = g_fft.analyse(g_ring, db);
 
     // Once a second: loudest band in dBFS. Near -120 means the mic delivers
     // silence (wiring/clock problem); around -60..-30 means real sound arrives.
@@ -178,7 +94,7 @@ static void analyse_block() {
         static float acc[8]; static float accBin[12]; static int accN = 0;
         for (int b = 0; b < 8; b++) acc[b] += db[b];
         for (int k = 0; k < 12; k++)
-            accBin[k] += 20.0f * log10f(sqrtf(g_re[k]*g_re[k] + g_im[k]*g_im[k]) * norm + 1e-9f);
+            accBin[k] += 20.0f * log10f(sqrtf(g_fft.re[k]*g_fft.re[k] + g_fft.im[k]*g_fft.im[k]) * (4.0f / FFT_N) + 1e-9f);
         accN++;
         if (millis() - lastBandMs >= 2000) {
             lastBandMs = millis();
@@ -227,26 +143,16 @@ static void analyse_block() {
     const float dt     = (float)HOP_N / (float)SAMPLE_RATE;                 // seconds between spectra
     const float tauAtk = (SMOOTH_ATTACK_BASE_MS  + SMOOTH_ATTACK_SLOPE  * t.smoothness) * 0.001f;
     const float tauRel = (SMOOTH_RELEASE_BASE_MS + SMOOTH_RELEASE_SLOPE * t.smoothness) * 0.001f;
-    const float aAtk   = 1.0f - expf(-dt / tauAtk);
-    const float aRel   = 1.0f - expf(-dt / tauRel);
+    const float aAtk   = audio_smooth_alpha(dt, tauAtk);
+    const float aRel   = audio_smooth_alpha(dt, tauRel);
 
     AudioFeatures f;
-    float sum = 0.0f;
     for (int b = 0; b < 8; b++) {
-        const float bottom = t.floorDb[b] + t.marginDb;
-        float span = g_ceilDb - bottom;
-        if (span < MIN_RANGE_DB) span = MIN_RANGE_DB;
-        float v = (db[b] - bottom) / span;
-        v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
-        // Follow the target: quickly when it rises, more slowly when it falls.
-        g_smooth[b] += (v - g_smooth[b]) * (v > g_smooth[b] ? aAtk : aRel);
+        const float v = audio_band_value(db[b], t.floorDb[b], t.marginDb, g_ceilDb);
+        g_smooth[b] = audio_smooth_step(g_smooth[b], v, aAtk, aRel);
         f.bands[b] = g_smooth[b];
-        sum += g_smooth[b];
     }
-    f.level = sum / 8.0f;
-    f.bass  = (f.bands[0] + f.bands[1]) / 2.0f;
-    f.mid   = (f.bands[2] + f.bands[3] + f.bands[4]) / 3.0f;
-    f.treb  = (f.bands[5] + f.bands[6] + f.bands[7]) / 3.0f;
+    audio_aggregate(&f);
 
     portENTER_CRITICAL(&g_featMux);
     g_features = f;
@@ -255,8 +161,6 @@ static void analyse_block() {
 }
 
 // ---------------------------------------------------------------- Tuning API
-static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
-
 void audio_tuning_defaults(AudioTuning *out) { *out = TUNE_DEFAULT; }
 
 void audio_tuning_get(AudioTuning *out, float rawDb[8], bool *calibrating) {
@@ -268,11 +172,7 @@ void audio_tuning_get(AudioTuning *out, float rawDb[8], bool *calibrating) {
 }
 
 void audio_tuning_set(const AudioTuning &in) {
-    AudioTuning t = in;
-    for (int b = 0; b < 8; b++) t.floorDb[b] = clampf(t.floorDb[b], -120.0f, -20.0f);
-    t.marginDb   = clampf(t.marginDb,   0.0f,   20.0f);
-    t.minCeilDb  = clampf(t.minCeilDb,  -80.0f, -20.0f);
-    t.smoothness = clampf(t.smoothness, 0.0f,   100.0f);
+    const AudioTuning t = audio_tuning_clamped(in);
     portENTER_CRITICAL(&g_featMux);
     g_tune = t;
     portEXIT_CRITICAL(&g_featMux);
@@ -348,17 +248,16 @@ static void micTask(void *) {
                 g_dc = s; g_dcSeeded = true;
                 // Settle the high-pass on the initial offset so boot has no step transient
                 // that would park the loudness ceiling high for seconds.
-                for (int i = 0; i < 4000; i++) hp_process(s);
+                for (int i = 0; i < 4000; i++) g_hp.process(s);
             }
             g_dc += (s - g_dc) * DC_ALPHA;
-            s = hp_process(s);
+            s = g_hp.process(s);
 
             // Collect HOP_N new samples, then slide the ring and run one FFT
             // (50% overlap with the previous window).
             hopBuf[fill++] = s;
             if (fill == HOP_N) {
-                memmove(g_ring, g_ring + HOP_N, (FFT_N - HOP_N) * sizeof(float));
-                memcpy(g_ring + (FFT_N - HOP_N), hopBuf, HOP_N * sizeof(float));
+                audio_ring_append(g_ring, hopBuf);
                 fill = 0;
                 analyse_block();
             }
@@ -371,8 +270,8 @@ bool audio_source_begin(AudioSourceKind kind) {
     g_kind = kind;
     if (kind != AUDIO_SRC_MIC) return true;
 
-    fft_init();
-    hp_init();
+    g_fft.init();
+    g_hp.init();
     audio_tuning_load();   // saved web-UI settings, if any
 
     i2s_config_t cfg = {};

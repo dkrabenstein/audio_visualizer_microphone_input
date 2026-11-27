@@ -7,3 +7,6 @@
 # Ignore Wi-Fi and device credentials
 secrets.h
 **/secrets.h
+
+# Node tooling for the JS tests (npm install)
+node_modules/

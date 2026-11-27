@@ -13,8 +13,10 @@ const net = require('net');
 // ESP32 address: its mDNS name by default, or `node server.js <host-or-ip>`,
 // or update it from the UI. The ESP32 prints both on the serial monitor at boot.
 let ESP32_HOST = process.argv[2] || 'visualizer-esp-32.local';
-const UDP_PORT = 49152;
-const HTTP_PORT = 3000;
+// The ports can be overridden with environment variables. The defaults are what the firmware expects;
+// the overrides exist so the automated tests (test/js/test_server.js) can run a copy beside a real one.
+const UDP_PORT = Number(process.env.VIZ_UDP_PORT) || 49152;
+const HTTP_PORT = Number(process.env.VIZ_HTTP_PORT) || 3000;
 // The web UI lives in data/www (flashed to the ESP32 with `pio run -t uploadfs`) and is served from
 // there here too, so the laptop and the board always show the same page.
 const WEB_ROOT = path.resolve(__dirname, '..', 'data', 'www');
@@ -61,7 +63,7 @@ function setHost(host) {
 // source address is the board's current IP, so a DHCP change is picked up in
 // seconds with no mDNS. mDNS stays as the fallback (e.g. a firewall blocking
 // inbound UDP, or no beacon heard). A manually entered raw IP is never overridden.
-const BEACON_PORT = 49153;
+const BEACON_PORT = Number(process.env.VIZ_BEACON_PORT) || 49153;
 const BEACON_FRESH_MS = 8000;
 let lastBeaconAt = 0;
 
@@ -190,7 +192,14 @@ const server = http.createServer((req, res) => {
 
   // Serve the web UI straight from data/www, the same files the ESP32 serves, so there is a
   // single copy. The path is checked to stay inside that folder.
-  const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  // decodeURIComponent throws on a badly encoded path such as "/%E0%A4%A"; answer 400 instead of crashing.
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent(req.url.split('?')[0]);
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Bad request');
+  }
   const filePath = path.join(WEB_ROOT, urlPath === '/' ? 'index.html' : urlPath);
   if (!filePath.startsWith(WEB_ROOT + path.sep)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });

@@ -65,7 +65,7 @@ spectrum bars (tested)
 bass bloom (tested)
 .55 + 12*sat(bass*level*.5)*tri(x)
 
-Are there any tests that should be put in the tests directory as unit tests? Or would I put unit tests somewhere else?
+/clear
 
 Update main to relect the online version. Make a new branch from main called feature/independent-strips and checkout the branch. Push the branch to online and set it as the upstream branch.
 

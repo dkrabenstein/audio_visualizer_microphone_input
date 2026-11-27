@@ -1,0 +1,77 @@
+# Runs the automated tests on every push to main and on every pull request.
+#
+# Three independent jobs, so a failure points at the part that broke:
+#   native    C++ logic tests (expression VM, strips, API guard, microphone maths and signal processing)
+#   web       JavaScript tests: compiler, preview vs firmware VM, random programs, the web page in jsdom, the dev server
+#   firmware  the real firmware still compiles for the ESP32-S3 (the tests above only build the logic on the host)
+#
+# Not run here: test/hardware/test_board.js, which needs the physical board. Run it by hand after firmware
+# changes:  VIZ_PORT=COM3 node test/hardware/test_board.js
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # platformio.ini stores its build cache under ${sysenv.USERPROFILE}, which Linux does not define.
+  USERPROFILE: ${{ github.workspace }}/.ci-home
+
+jobs:
+  native:
+    name: C++ logic tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-native-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      # The native environment builds the pure-logic sources with the runner's g++ and runs them under Unity.
+      - run: pio test -e native
+
+  web:
+    name: Web page, compiler and dev server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24          # jsdom 31 needs Node 22.22+ or 24.15+
+          cache: npm
+      - run: npm ci
+      # Needs g++ (preinstalled on ubuntu-latest) to build the firmware VM that the preview is compared with.
+      - run: node test/js/run_all.js
+
+  firmware:
+    name: Firmware compiles (ESP32-S3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-esp32-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      # include/secrets.h is gitignored (it holds the OTA password and the API token). A build only needs it to
+      # exist, so use the example file, whose placeholder token already satisfies the length check.
+      - run: cp include/secrets.h.example include/secrets.h
+      - run: pio run -e esp32-s3-devkitc-1-n32r16v

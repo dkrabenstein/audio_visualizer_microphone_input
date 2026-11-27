@@ -211,9 +211,13 @@ function verifyStack(code) {
 const f32 = Math.fround;
 const LUT_SIZE = 512;
 const INV_2PI = f32(0.15915494309);
+const TWO_PI_F32 = f32(6.28318530718);
 const sinLut = new Float32Array(LUT_SIZE + 1);
 for (let i = 0; i <= LUT_SIZE; i++)
-  sinLut[i] = f32(Math.sin(i * 2 * Math.PI / LUT_SIZE));
+  // Built the way the firmware builds it, in float32: sinf((float)i * TWO_PI / LUT_SIZE). The entries then
+  // carry the same ~5e-7 rounding as the board's table (e.g. the last entry is not exactly 0), which matters
+  // when a pattern divides by a sine near a zero crossing.
+  sinLut[i] = f32(Math.sin(f32(f32(i * TWO_PI_F32) / LUT_SIZE)));
 
 function sSin(rad) {
   if (!Number.isFinite(rad)) return 0;
@@ -226,7 +230,8 @@ function sSin(rad) {
   if (i >= LUT_SIZE) { i = LUT_SIZE - 1; frac = 1; }
   return f32(sinLut[i] + f32(f32(sinLut[i + 1] - sinLut[i]) * frac));
 }
-const sCos = rad => sSin(f32(rad + 1.57079632679));
+const HALF_PI_F32 = f32(1.57079632679);   // the firmware adds a float32 constant here too
+const sCos = rad => sSin(f32(rad + HALF_PI_F32));
 
 function evalCode(code, ctx) {
   const st = [];

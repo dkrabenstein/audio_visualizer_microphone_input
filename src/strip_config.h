@@ -17,6 +17,17 @@ struct StripConfig {
     uint8_t  reversed[NUM_STRIPS];  // 0: x=0 is the first LED (nearest the controller); 1: x=0 is the last
 };
 
+// Pure helper (no hardware, unit tested): counts clamped to 1..STRIP_MAX_LEDS, reversed to 0/1.
+static inline StripConfig strip_config_sanitized(const StripConfig &in) {
+    StripConfig c = in;
+    for (int s = 0; s < NUM_STRIPS; s++) {
+        if (c.count[s] < 1) c.count[s] = 1;
+        if (c.count[s] > STRIP_MAX_LEDS) c.count[s] = STRIP_MAX_LEDS;
+        c.reversed[s] = c.reversed[s] ? 1 : 0;
+    }
+    return c;
+}
+
 void strip_config_defaults(StripConfig *out);   // the counts of the strips as built
 void strip_config_load();                       // call once at boot, before the strips are created
 void strip_config_get(StripConfig *out);        // thread-safe snapshot
