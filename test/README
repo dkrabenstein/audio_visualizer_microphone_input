@@ -7,13 +7,19 @@ C++ (firmware logic, run on the laptop with PlatformIO's native platform + Unity
     pio test -e native                  all suites
     pio test -e native -f test_vm       one suite
 
-    test_vm            expression VM: validator, every opcode, guarded maths, limits (src/expr_vm.cpp)
+    test_vm            expression VM: validator, every opcode, guarded maths, limits, and random programs
+                       (valid ones always give a finite value; garbage is rejected or runs safely) (src/expr_vm.cpp)
     test_strip_config  LED strip length / direction clamping (src/strip_config.h)
     test_api_guard     API token comparison and the allow/refuse rule (src/api_guard_logic.h)
     test_audio         microphone maths: dB -> 0..1, band means, smoothing, tuning clamps (src/audio_math.h)
+    test_audio_dsp     microphone signal processing: 90 Hz high-pass, Hann window, FFT, band levels, the
+                       sample ring (src/audio_dsp.h). Generated sine waves with known answers, no microphone.
 
     The logic under test lives in headers/files without Arduino or FreeRTOS includes, so it compiles
     on the laptop. The thin hardware wrappers (api_guard.cpp, the I2S capture) are not covered here.
+
+    The native build uses -msse2 -mfpmath=sse so float maths is true 32-bit, like the ESP32. A 32-bit MinGW
+    otherwise computes in 80-bit x87 registers and results differ from the board in the last bits.
 
 JavaScript (web page and laptop server)
     npm install                         once: installs jsdom (a fake browser, development only)
@@ -21,6 +27,8 @@ JavaScript (web page and laptop server)
     node test/js/test_server.js         one file
 
     test_compiler / test_differential   compiler.js, and its results against the firmware VM (needs g++)
+    test_fuzz                           thousands of random programs, three ways: double-precision reference,
+                                        browser preview, firmware VM. FUZZ_SEED=n FUZZ_N=20000 for more.
     test_firmware_sync                  opcode table, ABI, default pattern, program fingerprint vs the firmware
     test_presets / test_fastled         presets.js and fastled.js
     test_index_html                     structure of the page; slotHash() and presetsOnBoard()
@@ -42,3 +50,7 @@ On the real board (needs the board on Wi-Fi; USB only for the reset steps)
     changes are lost on reboot, saved ones survive, reset forgets them, bad input is refused, values are
     clamped). The token is read from include/secrets.h and never printed. Your strip and tuning settings are
     put back at the end, saved copy included, and compared with the start. Takes about 2 minutes.
+
+Automatic runs
+    .github/workflows/tests.yml runs the native tests, the JavaScript tests and a firmware build on every push
+    to main and every pull request. The on-board test above is not part of it (it needs the board).

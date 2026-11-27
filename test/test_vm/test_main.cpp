@@ -262,6 +262,139 @@ void test_result_is_always_finite() {
     TEST_ASSERT_TRUE(isfinite(run({C(10), C(100), OPC(OP_POW), C(0), OPC(OP_MUL)})));
 }
 
+// ---------------------------------------------------------------- fuzzing
+// Random programs, from a fixed seed so a failure repeats. expr_eval() has no bounds checks by design; its safety
+// rests entirely on expr_validate(), so these throw a lot at the validator and then run whatever it lets through.
+static uint32_t fz = 20240611u;
+static uint32_t fzu() { fz = fz * 1664525u + 1013904223u; return fz >> 8; }
+static float fzf(float lo, float hi) { return lo + (hi - lo) * ((float)(fzu() & 0xFFFF) / 65535.0f); }
+
+static float fz_constant() {
+    switch (fzu() % 12) {
+        case 0: return 0.0f;
+        case 1: return 1.0f;
+        case 2: return -1.0f;
+        case 3: return 0.5f;
+        case 4: return 1e30f;
+        case 5: return -1e30f;
+        case 6: return 1e-30f;
+        case 7: return 3.0e38f;                         // near the largest float
+        case 8: return 1e-38f;                          // near the smallest
+        case 9: return fzf(-1000.0f, 1000.0f);
+        case 10: return fzf(-1.0f, 1.0f);
+        default: return fzf(0.0f, 10.0f);
+    }
+}
+// A program that obeys the stack rules by construction.
+static ExprProgram random_valid_program() {
+    ExprProgram p{};
+    const int target = 1 + (int)(fzu() % (EXPR_MAX_OPS - 2));
+    int depth = 0;
+    while (p.count < target || depth != 1) {
+        const bool roomToPush = depth < EXPR_STACK_MAX && p.count + depth + 1 <= EXPR_MAX_OPS;
+        const uint32_t r = fzu() % 6;
+        ExprOpcode o{};
+        if (depth >= 2 && (p.count >= target || !roomToPush || r == 0)) {
+            o.op = (uint8_t)(OP_ADD + fzu() % (OP_MAX - OP_ADD + 1)); depth--;
+        } else if (depth >= 1 && (r == 1 || (!roomToPush && depth == 1))) {
+            o.op = (uint8_t)(OP_NEG + fzu() % (OP_TRI - OP_NEG + 1));
+        } else if (roomToPush) {
+            const uint32_t k = fzu() % 9;
+            if (k == 0) { o.op = OP_CONST; o.arg = fz_constant(); }
+            else if (k == 1) { o.op = OP_BAND; o.arg = (float)(fzu() % 8); }
+            else o.op = (uint8_t)(k - 1 <= 1 ? OP_X + (k - 1) : OP_IDX + (k - 2) % 6);
+            if (o.op > OP_TREB) o.op = OP_LEVEL;
+            depth++;
+        } else {
+            o.op = OP_ABS;                               // cannot push and cannot reduce: keep depth, make progress
+        }
+        p.ops[p.count++] = o;
+    }
+    return p;
+}
+static ExprCtx random_context(float *bands) {
+    for (int i = 0; i < 8; i++) bands[i] = (fzu() % 5 == 0) ? (float)(fzu() % 2) : fzf(0.0f, 1.0f);
+    ExprCtx c{};
+    c.x = fzf(0.0f, 1.0f);
+    c.t = (fzu() % 4 == 0) ? 3600.0f : fzf(0.0f, 3600.0f);
+    c.idx = (float)(fzu() % 4);
+    c.level = fzf(0.0f, 1.0f); c.bass = fzf(0.0f, 1.0f); c.mid = fzf(0.0f, 1.0f); c.treb = fzf(0.0f, 1.0f);
+    c.bands = bands;
+    return c;
+}
+
+void test_fuzz_random_valid_programs_validate_and_always_give_a_finite_value() {
+    for (int n = 0; n < 20000; n++) {
+        ExprProgram p = random_valid_program();
+        TEST_ASSERT_EQUAL_INT_MESSAGE(EXPR_OK, expr_validate(&p), "a program built to obey the stack rules was rejected");
+        TEST_ASSERT_TRUE(p.maxDepth >= 1 && p.maxDepth <= EXPR_STACK_MAX);
+        float bands[8];
+        for (int k = 0; k < 3; k++) {
+            ExprCtx c = random_context(bands);
+            TEST_ASSERT_TRUE_MESSAGE(isfinite(expr_eval(&p, &c)), "a validated program produced NaN or infinity");
+        }
+    }
+}
+void test_fuzz_garbage_programs_are_rejected_or_run_safely() {
+    const float args[] = { 0.0f, 1.0f, 7.0f, 8.0f, -1.0f, 2.5f, 1e30f, -1e30f, (float)NAN, (float)INFINITY, (float)-INFINITY };
+    int accepted = 0;
+    for (int n = 0; n < 50000; n++) {
+        ExprProgram p{};
+        p.count = (uint8_t)(fzu() % (EXPR_MAX_OPS + 4));          // sometimes longer than allowed
+        for (int i = 0; i < p.count && i < EXPR_MAX_OPS; i++) {
+            // Mostly real opcodes, sometimes any byte, so rejection of unknown opcodes is exercised too.
+            p.ops[i].op = (fzu() % 4 == 0) ? (uint8_t)fzu() : (uint8_t)(fzu() % 41);
+            p.ops[i].arg = (fzu() % 3 == 0) ? args[fzu() % (sizeof args / sizeof args[0])] : fz_constant();
+        }
+        const ExprError e = expr_validate(&p);
+        if (e != EXPR_OK) continue;                                // rejected: nothing runs
+        accepted++;
+        TEST_ASSERT_TRUE(p.maxDepth >= 1 && p.maxDepth <= EXPR_STACK_MAX);
+        float bands[8];
+        ExprCtx c = random_context(bands);
+        TEST_ASSERT_TRUE_MESSAGE(isfinite(expr_eval(&p, &c)), "an accepted random program produced NaN or infinity");
+    }
+    TEST_ASSERT_TRUE_MESSAGE(accepted > 50, "the garbage generator never produced an acceptable program, so the run-safely half was not exercised");
+}
+void test_fuzz_validator_agrees_with_an_independent_stack_check() {
+    // Re-derive "is this a legal program" from the opcode table alone and compare with expr_validate().
+    for (int n = 0; n < 30000; n++) {
+        ExprProgram p{};
+        p.count = (uint8_t)(1 + fzu() % 40);                       // long enough to overflow the 16-deep stack
+        for (int i = 0; i < p.count; i++) {
+            // Half the ops are sources (push), so deep stacks and exact-depth-16 programs occur.
+            p.ops[i].op = (fzu() % 2) ? (uint8_t)(fzu() % 9) : (uint8_t)(fzu() % 41);
+            p.ops[i].arg = (p.ops[i].op == OP_BAND) ? (float)(fzu() % 8) : fz_constant();
+        }
+        int depth = 0; bool legal = true;
+        for (int i = 0; i < p.count && legal; i++) {
+            const uint8_t op = p.ops[i].op;
+            int pops, pushes;
+            if (op <= OP_TREB)                      { pops = 0; pushes = 1; }
+            else if (op >= OP_ADD && op <= OP_MAX)  { pops = 2; pushes = 1; }
+            else if (op >= OP_NEG && op <= OP_TRI)  { pops = 1; pushes = 1; }
+            else { legal = false; break; }
+            if (depth < pops) { legal = false; break; }
+            depth += pushes - pops;
+            if (depth > EXPR_STACK_MAX) legal = false;
+        }
+        if (legal && depth != 1) legal = false;
+        TEST_ASSERT_TRUE_MESSAGE((expr_validate(&p) == EXPR_OK) == legal, "the validator and the independent check disagree about a program");
+    }
+}
+
+void test_stack_depth_boundary_is_exact() {
+    // N values pushed, then N-1 additions: the stack peaks at N. Legal exactly when N <= EXPR_STACK_MAX.
+    for (int n = 1; n <= 32; n++) {
+        ExprProgram p{};
+        for (int i = 0; i < n; i++) p.ops[p.count++] = ExprOpcode{OP_CONST, 1.0f};
+        for (int i = 0; i < n - 1; i++) p.ops[p.count++] = ExprOpcode{OP_ADD, 0.0f};
+        const ExprError e = expr_validate(&p);
+        if (n <= EXPR_STACK_MAX) { TEST_ASSERT_EQUAL_INT(EXPR_OK, e); TEST_ASSERT_EQUAL_UINT8(n, p.maxDepth); TEST_ASSERT_EQUAL_FLOAT((float)n, expr_eval(&p, &ctx)); }
+        else TEST_ASSERT_EQUAL_INT_MESSAGE(EXPR_ERR_OVERFLOW, e, "a stack deeper than the limit was accepted");
+    }
+}
+
 int main(int, char **) {
     UNITY_BEGIN();
     RUN_TEST(test_rejects_empty);
@@ -301,5 +434,9 @@ int main(int, char **) {
     RUN_TEST(test_expression_sine_sweep);
     RUN_TEST(test_expression_is_repeatable);
     RUN_TEST(test_result_is_always_finite);
+    RUN_TEST(test_fuzz_random_valid_programs_validate_and_always_give_a_finite_value);
+    RUN_TEST(test_fuzz_garbage_programs_are_rejected_or_run_safely);
+    RUN_TEST(test_fuzz_validator_agrees_with_an_independent_stack_check);
+    RUN_TEST(test_stack_depth_boundary_is_exact);
     return UNITY_END();
 }

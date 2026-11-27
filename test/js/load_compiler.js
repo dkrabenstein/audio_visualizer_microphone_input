@@ -12,5 +12,5 @@ const src = fs.readFileSync(file, 'utf8');
 
 // The trailing expression is the script's completion value, which runInNewContext returns.
 module.exports = vm.runInNewContext(
-  src + '\n;({ compile, evalCode, CompileError, toPayload, OP, ABI, MAX_OPS, STACK_MAX });',
+  src + '\n;({ compile, evalCode, CompileError, toPayload, OP, ABI, MAX_OPS, STACK_MAX, sSin, sCos });',
   {}, { filename: file });

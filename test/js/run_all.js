@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
 
-const FILES = ['test_compiler.js', 'test_differential.js', 'test_firmware_sync.js', 'test_presets.js',
+const FILES = ['test_compiler.js', 'test_differential.js', 'test_fuzz.js', 'test_firmware_sync.js', 'test_presets.js',
                'test_fastled.js', 'test_index_html.js', 'test_server.js',
                'test_page_token.js', 'test_page_core.js', 'test_page_tabs.js', 'test_page_setup.js'];
 const PARALLEL = Math.max(1, Math.min(FILES.length, os.cpus().length - 1));

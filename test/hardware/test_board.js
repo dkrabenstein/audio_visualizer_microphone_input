@@ -71,18 +71,21 @@ const sameTuning = (a, b) => near(a.floors, b.floors) && Math.abs(a.margin - b.m
 const py = path.join(os.homedir(), '.platformio', 'penv', 'Scripts', 'python.exe');
 const esptool = path.join(os.homedir(), '.platformio', 'packages', 'tool-esptoolpy', 'esptool.py');
 async function reboot() {
+  // This board is back on the network about a second after a reset, reporting an uptime of 1 s, so it is never
+  // seen "down". Detect the restart from the uptime instead: after a reset it is far lower than it would be had
+  // the board kept running since we last looked (that includes the ~1.6 s esptool itself takes). uptimeS is
+  // whole seconds, so allow 1.2 s of rounding.
   const before = (await get('/api/status')).json;
   const t0 = Date.now();
   const r = spawnSync(py, [esptool, '--chip', 'esp32s3', '--port', PORT, '--after', 'hard_reset', 'read_mac'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error('could not reset the board over ' + PORT + ': ' + (r.stderr || r.error));
   let sawDown = false;
-  for (let i = 0; i < 90; i++) {                       // wait for it to rejoin Wi-Fi (this can take 20 s or more)
-    await sleep(1000);
+  for (let i = 0; i < 300; i++) {                       // up to ~90 s: Wi-Fi can be slower than usual
+    await sleep(300);
     const s = (await get('/api/status')).json;
     if (!s) { sawDown = true; continue; }
-    // Restarted if it went away and came back, or if its uptime is lower than it would be had it kept running.
-    const wouldBe = (before ? before.uptimeS : 0) + (Date.now() - t0) / 1000;
-    if (sawDown || s.uptimeS < wouldBe - 5) { await sleep(1500); return s; }
+    const expectedIfNotReset = (before ? before.uptimeS : 0) + (Date.now() - t0) / 1000;
+    if (sawDown || s.uptimeS < expectedIfNotReset - 1.2) { await sleep(1500); return s; }
   }
   throw new Error('board did not come back after the reset');
 }

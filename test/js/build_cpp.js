@@ -9,6 +9,9 @@ const { spawnSync } = require('child_process');
 function buildCpp(sources, out, includeDir) {
   const args = ['-std=gnu++17', '-O1', '-I', includeDir, ...sources, '-o', out];
   if (process.platform === 'win32') args.push('-Wl,--no-insert-timestamp');   // PE-only option; GNU ld for ELF rejects it
+  // True 32-bit float arithmetic, like the ESP32. A 32-bit MinGW defaults to x87 (80-bit intermediates), whose
+  // results differ from the board in the last bits. Harmless on x86-64 Linux, where SSE is already the default.
+  if (process.platform === 'win32') args.push('-msse2', '-mfpmath=sse');
   const r = spawnSync('g++', args, { encoding: 'utf8' });
   return { ok: !r.error && r.status === 0, message: r.error ? r.error.message : r.stderr };
 }
