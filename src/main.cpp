@@ -484,26 +484,11 @@ static void setupHttpRoutes() {
 
     // POST /api/select
     server.on("/api/select", HTTP_POST, [](AsyncWebServerRequest *r) {
-        String value;
-        if (r->hasParam("slot", true)) {
-            value = r->getParam("slot", true)->value();
-        } else if (r->hasParam("slot", false)) {
-            value = r->getParam("slot", false)->value();
-        } else {
-            r->send(400, "application/json", "{\"error\":\"missing slot parameter\"}");
-            return;
-        }
-        // Only a plain whole number counts. toInt() on its own reads "3abc" as 3 and "abc" or "" as 0, which would
-        // select a slot nobody asked for. Same rule as /api/brightness and /api/white.
-        const int slot = value.toInt();
-        if (String(slot) != value) {
-            r->send(400, "application/json", "{\"error\":\"slot must be a whole number\"}");
-            return;
-        }
-
-        // Check the range before the cast to a byte, or 256 would wrap round to slot 0.
-        if (slot < 0 || slot >= NUM_SLOTS || !ram_store_activate((uint8_t)slot)) {
-            r->send(400, "application/json", "{\"error\":\"invalid slot index\"}");
+        // Strict whole number in range: the range check happens before the cast to a byte, so 256 cannot wrap to 0.
+        int slot;
+        if (!require_int_param(r, "slot", 0, NUM_SLOTS - 1, &slot)) return;
+        if (!ram_store_activate((uint8_t)slot)) {
+            send_error(r, "invalid slot index");   // the page matches this text to re-upload presets after a reboot
             return;
         }
         g_whiteK = 0;   // picking a pattern or colour ends any white light
@@ -512,22 +497,16 @@ static void setupHttpRoutes() {
 
     // POST /api/white   kelvin=2000..6500 (or kelvin=off), form body or query string
     server.on("/api/white", HTTP_POST, [](AsyncWebServerRequest *r) {
-        auto p = r->hasParam("kelvin", true) ? r->getParam("kelvin", true)
-               : (r->hasParam("kelvin", false) ? r->getParam("kelvin", false) : nullptr);
-        if (!p) {
-            r->send(400, "application/json", "{\"error\":\"missing kelvin parameter\"}");
-            return;
-        }
-        const String v = p->value();
+        String v;
+        if (!get_param(r, "kelvin", v)) { send_error(r, "missing kelvin parameter"); return; }
         if (v == "off") {
             g_whiteK = 0;
             r->send(200, "application/json", "{\"ok\":true,\"kelvin\":null}");
             return;
         }
-        const int k = v.toInt();
-        if (k < WHITE_MIN_K || k > WHITE_MAX_K || String(k) != v) {
-            r->send(400, "application/json",
-                    String("{\"error\":\"kelvin must be a whole number ") + WHITE_MIN_K + "-" + WHITE_MAX_K + " or off\"}");
+        int k;
+        if (!parse_whole_number(v.c_str(), WHITE_MIN_K, WHITE_MAX_K, &k)) {
+            send_error(r, String("kelvin must be a whole number ") + WHITE_MIN_K + "-" + WHITE_MAX_K + " or off");
             return;
         }
         g_whiteK = (uint16_t)k;
@@ -617,35 +596,17 @@ static void setupHttpRoutes() {
 
     // POST /api/power   on=1 or on=0 (form body or query string)
     server.on("/api/power", HTTP_POST, [](AsyncWebServerRequest *r) {
-        auto p = r->hasParam("on", true) ? r->getParam("on", true)
-               : (r->hasParam("on", false) ? r->getParam("on", false) : nullptr);
-        if (!p) {
-            r->send(400, "application/json", "{\"error\":\"missing on parameter\"}");
-            return;
-        }
-        const String v = p->value();
-        if (v != "0" && v != "1") {
-            r->send(400, "application/json", "{\"error\":\"on must be 0 or 1\"}");
-            return;
-        }
+        String v;
+        if (!get_param(r, "on", v)) { send_error(r, "missing on parameter"); return; }
+        if (v != "0" && v != "1") { send_error(r, "on must be 0 or 1"); return; }
         g_lightsOn = (v == "1");
         r->send(200, "application/json", String("{\"ok\":true,\"on\":") + (g_lightsOn ? "true" : "false") + "}");
     });
 
     // POST /api/brightness   value=0..100 (form body or query string)
     server.on("/api/brightness", HTTP_POST, [](AsyncWebServerRequest *r) {
-        auto p = r->hasParam("value", true) ? r->getParam("value", true)
-               : (r->hasParam("value", false) ? r->getParam("value", false) : nullptr);
-        if (!p) {
-            r->send(400, "application/json", "{\"error\":\"missing value parameter\"}");
-            return;
-        }
-        const String v = p->value();
-        const int pct = v.toInt();
-        if (pct < 0 || pct > 100 || String(pct) != v) {
-            r->send(400, "application/json", "{\"error\":\"value must be a whole number 0-100\"}");
-            return;
-        }
+        int pct;
+        if (!require_int_param(r, "value", 0, 100, &pct)) return;
         g_brightnessPct = (uint8_t)pct;
         r->send(200, "application/json", String("{\"ok\":true,\"value\":") + pct + "}");
     });
