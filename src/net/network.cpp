@@ -6,6 +6,7 @@
 #include <ArduinoOTA.h>
 #include <esp_system.h>
 #include "secrets.h"
+#include "network_config.h"
 #include "audio/audio_source.h"
 #include "audio/audio_packet.h"
 #include "net/wifi_manager.h"
@@ -14,15 +15,7 @@
 #include "net/http_routes.h"
 #include "net/network.h"
 
-// ---------------------------------------------------------------- Network Config
-const uint16_t UDP_PORT = 49152;
-// Advertised over mDNS, so the board is reachable as http://visualizer-esp-32.local
-// whatever IP DHCP hands out.
-static const char* MDNS_HOSTNAME = "visualizer-esp-32";
-// Presence beacon: the board broadcasts a tiny packet so the PC server learns
-// the current IP within seconds of any DHCP change, without relying on mDNS.
-const uint16_t BEACON_PORT = 49153;
-const uint32_t BEACON_INTERVAL_MS = 2000;
+// Ports, hostname and beacon interval: include/network_config.h
 static WiFiUDP udp;
 static WiFiUDP beaconUdp;
 

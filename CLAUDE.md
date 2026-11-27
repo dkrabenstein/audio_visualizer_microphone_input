@@ -39,6 +39,7 @@ SCK 15
 WS  16
 SD  18
 - Pin assignments should live in one header file. Do not hardcode pin numbers elsewhere.
+- Network names and ports (mDNS hostname, UDP audio port, beacon port) live in `include/network_config.h`; `server/server.js` has matching defaults and a test keeps them in step.
 
 ## Firmware conventions
 

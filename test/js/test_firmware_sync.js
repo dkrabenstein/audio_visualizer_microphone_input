@@ -17,7 +17,8 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL:', m); } 
 
 const opsH = fs.readFileSync(path.join(root, 'src', 'pattern', 'expr_ops.h'), 'utf8');
 const slotStoreCpp = fs.readFileSync(path.join(root, 'src', 'pattern', 'slot_store.cpp'), 'utf8');   // holds the default pattern
-const networkCpp = fs.readFileSync(path.join(root, 'src', 'net', 'network.cpp'), 'utf8');       // ports and beacon text
+const networkCpp = fs.readFileSync(path.join(root, 'src', 'net', 'network.cpp'), 'utf8');       // the beacon text
+const networkH = fs.readFileSync(path.join(root, 'include', 'network_config.h'), 'utf8');        // the ports
 const coreJs = fs.readFileSync(path.join(WWW, 'core.js'), 'utf8');   // slotHash() lives here
 
 // ---- opcode table
@@ -107,8 +108,8 @@ try {
 
   // Ports and the discovery beacon text, which both sides spell out.
   const num = (text, re) => Number((re.exec(text) || [])[1]);
-  ok(num(serverJs, /const UDP_PORT = Number\(process\.env\.VIZ_UDP_PORT\) \|\| (\d+);/) === num(networkCpp, /const uint16_t UDP_PORT = (\d+);/), 'UDP audio port: server.js and network.cpp agree');
-  ok(num(serverJs, /const BEACON_PORT = Number\(process\.env\.VIZ_BEACON_PORT\) \|\| (\d+);/) === num(networkCpp, /const uint16_t BEACON_PORT = (\d+);/), 'beacon port: server.js and network.cpp agree');
+  ok(num(serverJs, /const UDP_PORT = Number\(process\.env\.VIZ_UDP_PORT\) \|\| (\d+);/) === num(networkH, /constexpr uint16_t UDP_PORT = (\d+);/), 'UDP audio port: server.js and network_config.h agree');
+  ok(num(serverJs, /const BEACON_PORT = Number\(process\.env\.VIZ_BEACON_PORT\) \|\| (\d+);/) === num(networkH, /constexpr uint16_t BEACON_PORT = (\d+);/), 'beacon port: server.js and network_config.h agree');
   const beaconMain = (/beaconUdp\.write\(\(const uint8_t\*\)"(\w+)", (\d+)\)/.exec(networkCpp) || []);
   const beaconServer = (/msg\.toString\(\) !== '(\w+)'/.exec(serverJs) || [])[1];
   ok(beaconMain[1] === beaconServer && Number(beaconMain[2]) === beaconMain[1].length, 'beacon text: network.cpp sends "' + beaconMain[1] + '", server.js listens for "' + beaconServer + '"');
