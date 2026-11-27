@@ -20,9 +20,9 @@ h1{font-size:19px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
        border-radius:8px;padding:14px;margin-bottom:14px}
 label{display:block;font-size:15px;text-transform:uppercase;
       letter-spacing:.08em;color:var(--acc);margin-bottom:6px}
-input[type=text]{width:100%;background:#0b0c10;border:1px solid var(--line);
+input[type=text],input[type=password]{width:100%;background:#0b0c10;border:1px solid var(--line);
       color:var(--fg);padding:10px;border-radius:5px;font:inherit}
-input[type=text]:focus{outline:none;border-color:var(--acc)}
+input[type=text]:focus,input[type=password]:focus{outline:none;border-color:var(--acc)}
 #status{margin-top:8px;font-size:12px;min-height:18px}
 #status.ok{color:var(--ok)} #status.err{color:var(--err)}
 canvas{width:100%;height:70px;display:block;border-radius:5px;background:#000}
@@ -407,13 +407,34 @@ details.fold>summary:hover{color:var(--fg)!important}
     <details class="manual">
       <summary>manual override</summary>
       <div class="row" style="margin-top:8px">
-        <input id="esp_ip" type="text" value="visualizer.local" style="width:180px">
+        <input id="esp_ip" type="text" value="visualizer-esp-32.local" style="width:180px">
         <button id="save_ip">Use this address</button>
         <button id="auto_ip">Auto-detect</button>
       </div>
       <div class="meta">Enter a hostname or IP to pin the board (this turns the beacon off).
         Auto-detect goes back to the default, where the board's beacon finds it.</div>
     </details>
+  </div>
+
+  <div class="panel" id="wifi-panel">
+    <label>Wi-Fi network</label>
+    <div id="wifi-now" class="meta" style="margin:0 0 12px">checking&hellip;</div>
+    <details class="fold" id="wifi-fold">
+      <summary style="cursor:pointer;margin-bottom:10px;font-size:12px;letter-spacing:.08em;color:var(--acc)">CHANGE NETWORK</summary>
+      <div class="row" style="margin-bottom:8px">
+        <select id="wifi-list" style="flex:1;min-width:0"><option value="">scan for networks&hellip;</option></select>
+        <button id="wifi-scan">Scan</button>
+      </div>
+      <input id="wifi-ssid" type="text" placeholder="network name" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-bottom:8px">
+      <input id="wifi-pass" type="password" placeholder="password (empty for an open network)" autocomplete="off">
+      <div class="meta"><label style="display:inline;text-transform:none;letter-spacing:0;font-size:14px;color:var(--dim)"><input id="wifi-show" type="checkbox"> show password</label></div>
+      <div class="meta">The board only joins 2.4 GHz networks. It tries the new network first and only keeps it if it works, so a typo cannot lock you out.</div>
+    </details>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="wifi-connect">Connect</button>
+      <button id="wifi-forget">Forget network</button>
+    </div>
+    <div id="wifi-status" class="meta"></div>
   </div>
 
   <div class="panel">
@@ -492,6 +513,159 @@ details.fold>summary:hover{color:var(--fg)!important}
 <script src="presets.js"></script>
 <script src="fastled.js"></script>
 <script>
+// ---- API token ----
+// The board only accepts changes (POST requests) that carry the shared token from its secrets.h, in
+// an "X-Api-Token" header. Rather than touch every fetch() in this page, fetch is wrapped once here:
+// it adds the saved token to POSTs meant for the board, and if the board answers 401 it asks for the
+// token in a small dialog (once per browser, kept in localStorage) and sends the request again.
+(function () {
+  var KEY = 'viz_api_token';
+  var realFetch = window.fetch.bind(window);
+  var asking = null;                       // one dialog at a time, however many requests fail together
+
+  function saved() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function save(t) { try { if (t) localStorage.setItem(KEY, t); else localStorage.removeItem(KEY); } catch (e) {} }
+
+  // On the board every request is for the board. On the laptop page, device requests use an absolute
+  // URL (espUrl) and anything relative goes to the laptop's own server, which must not get the token.
+  function isForBoard(url) {
+    if (window.VIZ_LAPTOP === true) return /^https?:\/\//i.test(url);
+    return true;
+  }
+
+  // `retry` drops the caller's abort signal: callers set short timeouts meant for a slow network, but
+  // a retry follows a dialog the person took their time over, and an already-fired signal would
+  // make the retry fail before it left.
+  function withToken(init, token, retry) {
+    var o = Object.assign({}, init || {});
+    if (retry) delete o.signal;
+    var h = new Headers(o.headers || {});
+    if (token) h.set('X-Api-Token', token);
+    o.headers = h;
+    return o;
+  }
+
+  // The dialog is built on first use. Resolves to the entered token, or '' if cancelled.
+  function showDialog(note) {
+    return new Promise(function (resolve) {
+      var dlg = document.getElementById('tok-dlg');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'tok-dlg';
+        dlg.style.cssText = 'background:var(--panel,#14161d);color:var(--fg,#e6e6e6);border:1px solid var(--line,#2a2f3d);' +
+          'border-radius:8px;padding:18px;max-width:min(92vw,420px);width:100%';
+        dlg.innerHTML =
+          '<form method="dialog">' +
+          '<label style="display:block;font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc,#60a5fa);margin-bottom:8px">API token needed</label>' +
+          '<div style="font-size:14px;line-height:1.4;margin-bottom:10px">This board only accepts changes from devices that know its token. ' +
+          'Enter the <b>API_TOKEN</b> value from <code>include/secrets.h</code>. It is saved in this browser, so you only do this once.</div>' +
+          '<div id="tok-note" style="font-size:13px;color:var(--err,#f87171);min-height:18px;margin-bottom:6px"></div>' +
+          '<input id="tok-in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="API token" ' +
+          'style="width:100%;box-sizing:border-box;background:#0b0c10;border:1px solid var(--line,#2a2f3d);color:var(--fg,#e6e6e6);padding:10px;border-radius:5px;font:inherit">' +
+          '<label style="display:block;font-size:13px;color:var(--dim,#9aa0b0);margin:8px 0 14px;text-transform:none;letter-spacing:0">' +
+          '<input id="tok-show" type="checkbox"> show token</label>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+          '<button value="cancel" id="tok-cancel">Cancel</button>' +
+          '<button value="ok" id="tok-ok" class="primary">Save</button></div></form>';
+        document.body.appendChild(dlg);
+        dlg.querySelector('#tok-show').addEventListener('change', function (e) {
+          dlg.querySelector('#tok-in').type = e.target.checked ? 'text' : 'password';
+        });
+      }
+      var input = dlg.querySelector('#tok-in');
+      input.value = '';
+      input.type = 'password';
+      dlg.querySelector('#tok-show').checked = false;
+      dlg.querySelector('#tok-note').textContent = note || '';
+      dlg.returnValue = '';
+      dlg.onclose = function () {
+        resolve(dlg.returnValue === 'ok' ? input.value.trim() : '');
+        input.value = '';
+      };
+      dlg.querySelector('#tok-cancel').formNoValidate = true;
+      if (typeof dlg.showModal === 'function') { dlg.showModal(); input.focus(); }
+      else {                                // very old browser: fall back to the built-in prompt
+        var t = window.prompt('Enter the API_TOKEN value from include/secrets.h:', '');
+        resolve((t || '').trim());
+      }
+    });
+  }
+
+  function ask(note) {
+    if (!asking) asking = showDialog(note).finally(function () { asking = null; });
+    return asking;
+  }
+
+  window.fetch = async function (input, init) {
+    var url = (typeof input === 'string') ? input : (input && input.url) || '';
+    var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || !isForBoard(url)) {
+      return realFetch(input, init);
+    }
+    var sent = saved();
+    var res = await realFetch(input, withToken(init, sent));
+    var note = '';
+    if (res.status === 401 && sent) {      // the board refused the token we had: it is wrong, so drop it
+      save('');
+      note = 'The saved token was not accepted (did secrets.h change?). Enter it again.';
+    }
+    for (var tries = 0; res.status === 401 && tries < 3; tries++) {   // missing or wrong token
+      var t = await ask(note);
+      if (!t) return res;                  // cancelled: let the caller see the 401
+      res = await realFetch(input, withToken(init, t, true));
+      if (res.status === 401) { save(''); note = 'That token was not accepted. Check it and try again.'; }
+      else save(t);                        // only keep a token the board accepted
+    }
+    return res;
+  };
+
+  // ---- Pairing link ----
+  // Opening  http://<board>/#token=<API_TOKEN>  saves the token in this browser, so it never has to
+  // be typed. Everything after the # stays in the browser: it is not sent to the board, so it does
+  // not appear in any request or log. The token is removed from the address bar straight away, so it
+  // is not left in the history, a bookmark of the page, or a screenshot.
+  (function pair() {
+    var parts = location.hash.replace(/^#/, '').split('&'), tok = '', rest = [], found = false;
+    parts.forEach(function (p) {
+      if (p.indexOf('token=') === 0) {
+        found = true;
+        try { tok = decodeURIComponent(p.slice(6)); } catch (e) { tok = ''; }
+      } else if (p) rest.push(p);
+    });
+    if (!found) return;
+    try { history.replaceState(null, '', location.pathname + location.search + (rest.length ? '#' + rest.join('&') : '')); } catch (e) {}
+
+    function toast(msg, bad) {
+      var d = document.createElement('div');
+      d.textContent = msg;
+      d.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:9999;' +
+        'max-width:min(92vw,420px);padding:12px 16px;border-radius:8px;font-size:14px;line-height:1.4;' +
+        'background:var(--panel,#14161d);color:var(--fg,#e6e6e6);border:1px solid ' + (bad ? 'var(--err,#f87171)' : 'var(--ok,#4ade80)');
+      document.body.appendChild(d);
+      setTimeout(function () { d.remove(); }, 7000);
+    }
+
+    if (!tok) { toast('The pairing link has no token in it.', true); return; }
+    // Saved straight away, before the board has answered: the page sends its own requests the moment
+    // it loads (it uploads its patterns), and they must already carry the token or they get a 401 and
+    // raise the token dialog. If the board then refuses the token, it is taken back out.
+    save(tok);
+    if (window.VIZ_LAPTOP === true) {      // the board's address is not known yet: it is checked on first use
+      toast('Token saved in this browser.');
+      return;
+    }
+    // Ask the board whether it accepts the token.
+    realFetch('/api/auth', { method: 'POST', headers: { 'X-Api-Token': tok } }).then(function (r) {
+      if (r.ok) toast('Paired. This browser can now change the lights.');
+      else if (r.status === 401) { save(''); toast('The board did not accept the token in that link. Check you used the current one.', true); }
+      else toast('The board answered with an error (' + r.status + '). Try the link again.', true);
+    }).catch(function () {
+      toast('Token saved, but the board did not answer just now. It is checked on your next change.', true);
+    });
+  })();
+})();
+</script>
+<script>
 // Background pages release the board. Every open page costs the ESP32 TCP connections and CPU, and
 // enough of them made the board reboot. A page that has been hidden for IDLE_MS stops making any
 // request at all (fetch is rejected up front, so no connection is opened), then picks up again the
@@ -546,7 +720,7 @@ if (ON_LAPTOP) espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
 const apiBase = () => (typeof espUrl === 'function' ? espUrl() : '');
 if (ON_LAPTOP) $('#conn-panel').style.display = '';
 
-const DEFAULT_HOST = 'visualizer.local';
+const DEFAULT_HOST = 'visualizer-esp-32.local';
 let lastIp = null;
 
 function showTarget(j) {
@@ -1452,6 +1626,138 @@ if (!ON_LAPTOP) uploadPresets();
     b.addEventListener('click', function () { lastEdit = 0; setTimeout(refresh, 0); });
   });
   setTimeout(refresh, 500);
+})();
+</script>
+<script>
+// ---- Wi-Fi network (Setup tab) ----
+// Talks to /api/wifi. If the board cannot join its network it opens its own "visualizer-esp-32-XXXX"
+// access point and serves this same page, and this panel is where the network gets chosen.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var now = $('wifi-now'), status = $('wifi-status'), list = $('wifi-list'), ssid = $('wifi-ssid'),
+      pass = $('wifi-pass'), fold = $('wifi-fold'), connectBtn = $('wifi-connect');
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function say(m, bad) { status.textContent = m; status.style.color = bad ? 'var(--err)' : 'var(--dim)'; }
+  function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+  var jumped = false, applying = false, lastAp = false;
+
+  async function getJson(path, ms) {
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, ms || 2500);
+    try { return await (await fetch(base() + path, { signal: ctl.signal })).json(); }
+    finally { clearTimeout(to); }
+  }
+
+  function show(j) {
+    var t;
+    lastAp = !!j.ap;
+    if (j.state === 'trying') t = 'Trying the new network&hellip;';
+    else if (j.connected) t = 'Connected to <b>' + esc(j.ssid) + '</b> &middot; ' + esc(j.ip) +
+        ' &middot; ' + j.rssi + ' dBm &middot; <b>' + esc(j.host) + '</b>';
+    else if (j.ap) t = (j.ssid ? 'Cannot reach <b>' + esc(j.ssid) + '</b>. ' : 'No network saved. ') +
+        'Setup mode: this board is hosting <b>' + esc(j.apSsid) + '</b>. Choose a network below.';
+    else t = 'Connecting to <b>' + esc(j.ssid) + '</b>&hellip;';
+    now.innerHTML = t;
+    if (j.error && !applying) say(j.error, true);
+    // First time we see setup mode: bring the panel to the front. The page is probably open on a
+    // phone that just joined the board's own network.
+    if (j.ap && !jumped) {
+      jumped = true;
+      try { $('btn-setup').click(); } catch (e) {}
+      fold.open = true;
+      scan();
+    }
+    if (!j.ap) jumped = false;
+    connectBtn.disabled = j.state === 'trying';
+  }
+
+  async function refresh() {
+    if (document.hidden) return;
+    var tab = $('tab-setup');
+    if (!applying && tab && !tab.classList.contains('active') && jumped) return;
+    try { show(await getJson('/api/wifi')); }
+    catch (e) { if (!applying) now.textContent = 'board not reachable'; }
+  }
+
+  var scanning = false;
+  async function scan() {
+    if (scanning) return;
+    scanning = true; $('wifi-scan').disabled = true;
+    list.innerHTML = '<option value="">scanning&hellip;</option>';
+    try {
+      for (var i = 0; i < 30; i++) {                       // up to ~30 s (the board retries interrupted scans)
+        var j = await getJson('/api/wifi/scan', 4000);
+        if (!j.scanning) {
+          list.innerHTML = '<option value="">' + (j.networks.length ? 'choose a network (' + j.networks.length + ' found)' : 'none found') + '</option>';
+          j.networks.forEach(function (n) {
+            var o = document.createElement('option');
+            o.value = n.ssid;
+            o.textContent = n.ssid + (n.secure ? '' : ' (open)') + '  ' + n.rssi + ' dBm';
+            list.appendChild(o);
+          });
+          scanning = false; $('wifi-scan').disabled = false;
+          return;
+        }
+        await new Promise(function (r) { setTimeout(r, 1000); });
+      }
+      list.innerHTML = '<option value="">scan timed out</option>';
+    } catch (e) { list.innerHTML = '<option value="">scan failed</option>'; }
+    scanning = false; $('wifi-scan').disabled = false;
+  }
+
+  $('wifi-scan').addEventListener('click', scan);
+  list.addEventListener('change', function () { if (list.value) { ssid.value = list.value; pass.focus(); } });
+  $('wifi-show').addEventListener('change', function (e) { pass.type = e.target.checked ? 'text' : 'password'; });
+
+  connectBtn.addEventListener('click', async function () {
+    var name = ssid.value.trim();
+    if (!name) { say('enter or choose a network name', true); return; }
+    if (pass.value && (pass.value.length < 8 || pass.value.length > 63)) {
+      say('a Wi-Fi password is 8 to 63 characters', true); return;
+    }
+    applying = true; connectBtn.disabled = true;
+    say('Testing "' + name + '"...');
+    try {
+      var r = await fetch(base() + '/api/wifi', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                   body: JSON.stringify({ ssid: name, password: pass.value }) });
+      if (!r.ok) {
+        var e = {}; try { e = await r.json(); } catch (x) {}
+        say(e.error || 'board rejected it', true); applying = false; connectBtn.disabled = false; return;
+      }
+    } catch (e) { say('board not reachable', true); applying = false; connectBtn.disabled = false; return; }
+
+    // Poll for the result. If the board joins the network, its setup AP closes and this page loses
+    // the connection: that silence is the success case when we came in through the AP.
+    var started = Date.now(), misses = 0, viaAp = lastAp;
+    while (Date.now() - started < 40000) {
+      await new Promise(function (r) { setTimeout(r, 1500); });
+      var j = null;
+      try { j = await getJson('/api/wifi', 2000); misses = 0; } catch (e) { misses++; }
+      if (j) {
+        show(j);
+        if (j.state === 'connected') { say('Connected to ' + j.ssid + '. Open http://' + j.host + ' on that network.'); pass.value = ''; break; }
+        if (j.state !== 'trying') { say(j.error || 'could not join that network', true); break; }
+        say('Testing "' + name + '"...');
+      } else if (misses >= 3 && viaAp) {
+        say('The board left its setup network, so it probably joined "' + name + '". Reconnect this device to that network, then open http://visualizer-esp-32.local (or the IP shown on the serial monitor).');
+        break;
+      }
+    }
+    if (!status.textContent || status.textContent.indexOf('Testing') === 0) {
+      say('No answer from the board. If it joined the new network, open http://visualizer-esp-32.local on that network.', true);
+    }
+    applying = false; connectBtn.disabled = false;
+  });
+
+  $('wifi-forget').addEventListener('click', async function () {
+    if (!confirm('Forget the saved network? The board will open its setup network, and you will have to join it to choose a new one.')) return;
+    try {
+      await fetch(base() + '/api/wifi/forget', { method: 'POST' });
+      say('Forgotten. Join the setup network (visualizer-esp-32-XXXX) to choose a new one.');
+    } catch (e) { say('board not reachable', true); }
+  });
+
+  setInterval(refresh, 3000);
+  setTimeout(refresh, 300);
 })();
 </script>
 <script>

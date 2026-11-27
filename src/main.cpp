@@ -25,6 +25,8 @@
 #include "expr_vm.h"
 #include "audio_source.h"
 #include "strip_config.h"
+#include "wifi_manager.h"
+#include "api_guard.h"
 
 // Audio source: on-board I2S mic by default. Build with -DAUDIO_USE_UDP to take
 // features from the PC's UDP stream instead (handy for testing without a mic).
@@ -167,9 +169,9 @@ static bool ram_store_save(uint8_t slot, const char* name, const ExprProgram* p)
 
 // ---------------------------------------------------------------- Network Config
 const uint16_t UDP_PORT = 49152;
-// Advertised over mDNS, so the board is reachable as http://visualizer.local
+// Advertised over mDNS, so the board is reachable as http://visualizer-esp-32.local
 // whatever IP DHCP hands out.
-const char* MDNS_HOSTNAME = "visualizer";
+const char* MDNS_HOSTNAME = "visualizer-esp-32";
 // Presence beacon: the board broadcasts a tiny packet so the PC server learns
 // the current IP within seconds of any DHCP change, without relying on mDNS.
 const uint16_t BEACON_PORT = 49153;
@@ -184,6 +186,13 @@ static WiFiUDP beaconUdp;
 // page retries" instead of a reboot loop. 1-4 pages ran clean, and each connection is short-lived
 // (Connection: close), so 6 leaves headroom for bursts without letting the pile-up grow.
 static const uint8_t MAX_HTTP_CLIENTS = 6;
+// While the setup access point is up, the cap is higher. A single browser opens up to 6 connections to
+// one host by itself, and a phone or laptop that has just joined the setup network also fires its own
+// "is there internet?" probes and often opens the setup page unasked. With a cap of 6, those together
+// filled every slot and a real request was turned away (measured: "6 open now", requests failing in
+// 20 ms). The setup network has at most 3 clients and no crowd of open pages, which is what the lower
+// cap guards against.
+static const uint8_t MAX_HTTP_CLIENTS_SETUP = 10;
 
 class CappedWebServer : public AsyncWebServer {
 public:
@@ -191,7 +200,7 @@ public:
         // Replace the base class's onClient handler with one that counts connections.
         _server.onClient([](void *s, AsyncClient *c) {
             if (c == nullptr) return;
-            if (liveClients >= MAX_HTTP_CLIENTS) {
+            if (liveClients >= (wifi_manager_setup_ap_active() ? MAX_HTTP_CLIENTS_SETUP : MAX_HTTP_CLIENTS)) {
                 refused++;
                 c->close(true);
                 c->free();
@@ -429,9 +438,18 @@ static void handlePatternBody(AsyncWebServerRequest *req, uint8_t *data,
 static void setupHttpRoutes() {
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
+    // Any origin may call the API, because the laptop-hosted page is served from another origin.
+    // That is safe only because every change needs the X-Api-Token header (see api_guard.h): a
+    // stray page can read, but cannot write. The header has to be listed here or browsers refuse
+    // to send it cross-origin.
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type, X-Api-Token");
+
+    // First, so it sees every request before the real routes can answer it.
+    api_guard_install(server);
 
     server.onNotFound([](AsyncWebServerRequest *request) {
+        // While the setup AP is up, unknown hosts (phone connectivity probes) go to the setup page.
+        if (wifi_manager_captive_redirect(request)) return;
         if (request->method() == HTTP_OPTIONS) {
             request->send(200);
         } else {
@@ -733,6 +751,15 @@ static void setupHttpRoutes() {
         r->send(200, "application/json", "{\"ok\":true}");
     });
 
+    // POST /api/auth -- changes nothing. It is a POST, so the API guard only lets it through with
+    // the right token; the web page calls it after a pairing link to check that the token works.
+    server.on("/api/auth", HTTP_POST, [](AsyncWebServerRequest *r) {
+        r->send(200, "application/json", "{\"ok\":true}");
+    });
+
+    // Wi-Fi network: status, scan, set (tested before it is saved), forget.
+    wifi_manager_register_routes(server);
+
     // Web UI: serve data/www (uploaded to LittleFS as /www) at the site root.
     // Registered after the /api routes so those always match first.
     server.serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html");
@@ -760,18 +787,9 @@ static void sendBeacon() {
 }
 
 static void networkTask(void *) {
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    Serial.print("Connecting to Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(250));
-        Serial.print(".");
-    }
-    Serial.printf("\nConnected! ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
-
-    startMdns();
+    // Joins the network saved in flash, or opens the setup access point. Non-blocking: the web
+    // server below must run either way, because in setup mode it is how the network gets chosen.
+    wifi_manager_begin(MDNS_HOSTNAME);
 
     // false = never auto-format: a failed mount just means uploadfs hasn't been run.
     if (!LittleFS.begin(false)) {
@@ -781,32 +799,37 @@ static void networkTask(void *) {
     setupHttpRoutes();
     Serial.println("AsyncWebServer running on port 80");
 
-    // OTA: lets `pio run -e ota -t upload` flash over Wi-Fi. The password stops anyone else on
-    // the network from reflashing the board. mDNS is already started above, so ArduinoOTA's own
-    // mDNS handling is switched off to avoid two owners of the responder.
-    ArduinoOTA.setHostname(MDNS_HOSTNAME);
-    ArduinoOTA.setPassword(OTA_PASSWORD);
-    ArduinoOTA.setMdnsEnabled(false);
-    ArduinoOTA.onStart([]() { Serial.println("OTA: update starting"); });
-    ArduinoOTA.onEnd([]() { Serial.println("OTA: done, rebooting"); });
-    ArduinoOTA.onError([](ota_error_t e) { Serial.printf("OTA error %u\n", (unsigned)e); });
-    ArduinoOTA.begin();
-
-    udp.begin(UDP_PORT);
-    Serial.printf("UDP audio receiver listening on port %u\n", UDP_PORT);
+    bool otaStarted = false;   // ArduinoOTA needs an IP, so it starts on the first connection
 
     AudioPayload packet;
-    bool wasConnected = true;
+    bool wasConnected = false;
     uint32_t lastBeaconMs = 0;
 
     for (;;) {
-        // Connection watchdog: AutoReconnect rejoins Wi-Fi, but the DHCP lease
-        // may differ, so re-announce mDNS and beacon as soon as we're back.
-        const bool connected = (WiFi.status() == WL_CONNECTED);
+        wifi_manager_loop();
+
+        // Connection watchdog: AutoReconnect rejoins Wi-Fi, but the DHCP lease may differ, so
+        // re-announce mDNS and beacon as soon as we're back. The first pass through here is the
+        // initial connection (or never, if the board stays in setup mode).
+        const bool connected = wifi_manager_connected();
         if (connected && !wasConnected) {
-            Serial.printf("Wi-Fi back. ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
+            Serial.printf("Wi-Fi up. ESP32 IP: %s\n", WiFi.localIP().toString().c_str());
             startMdns();
             udp.begin(UDP_PORT);
+            Serial.printf("UDP audio receiver listening on port %u\n", UDP_PORT);
+            if (!otaStarted) {
+                // OTA: lets `pio run -e ota -t upload` flash over Wi-Fi. The password stops anyone
+                // else on the network from reflashing the board. mDNS is started above, so
+                // ArduinoOTA's own mDNS handling is switched off to avoid two owners of the responder.
+                ArduinoOTA.setHostname(MDNS_HOSTNAME);
+                ArduinoOTA.setPassword(OTA_PASSWORD);
+                ArduinoOTA.setMdnsEnabled(false);
+                ArduinoOTA.onStart([]() { Serial.println("OTA: update starting"); });
+                ArduinoOTA.onEnd([]() { Serial.println("OTA: done, rebooting"); });
+                ArduinoOTA.onError([](ota_error_t e) { Serial.printf("OTA error %u\n", (unsigned)e); });
+                ArduinoOTA.begin();
+                otaStarted = true;
+            }
             lastBeaconMs = 0;  // force an immediate beacon
         } else if (!connected && wasConnected) {
             Serial.println("Wi-Fi lost, waiting for auto-reconnect...");
@@ -822,7 +845,7 @@ static void networkTask(void *) {
             sendBeacon();
         }
 
-        int packetSize = udp.parsePacket();
+        int packetSize = connected ? udp.parsePacket() : 0;
         if (packetSize >= (int)sizeof(AudioPayload)) {
             udp.read((char*)&packet, sizeof(AudioPayload));
 
@@ -836,6 +859,17 @@ static void networkTask(void *) {
         }
 
         settingsAutosave();
+
+        // Say so when the connection cap turns clients away (at most once a second), so a burst of
+        // refused connections shows up on the serial monitor instead of looking like a flaky network.
+        static uint32_t lastRefused = 0, lastRefusedMs = 0;
+        if (CappedWebServer::refused != lastRefused && millis() - lastRefusedMs >= 1000) {
+            lastRefusedMs = millis();
+            Serial.printf("HTTP: %u connections refused so far (cap %u, %u open now)\n",
+                          (unsigned)CappedWebServer::refused, (unsigned)MAX_HTTP_CLIENTS,
+                          (unsigned)CappedWebServer::liveClients);
+            lastRefused = CappedWebServer::refused;
+        }
 
         // Render watchdog (diagnostic): if the frame counter stops advancing, say where it is stuck.
         static uint32_t wdFrames = 0, wdChangedMs = 0;
