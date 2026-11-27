@@ -54,6 +54,11 @@ static portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 static Creds        g_pending = {};
 static volatile bool g_pendingFlag = false;
 static volatile bool g_forgetFlag = false;
+// When the request arrived. Starting a trial (or forgetting) drops the board off the network it is
+// on, so doing it the instant the request lands can beat the HTTP reply out of the door and the
+// client never hears "ok". The loop waits this long first, so the reply is already on its way.
+static volatile uint32_t g_requestMs = 0;
+static const uint32_t REPLY_GRACE_MS = 400;
 
 // ---------------------------------------------------------------- Persistence (NVS)
 // Namespace "wifi": "ssid", "pass", and "seeded". The flag records that the compile-time network
@@ -234,7 +239,7 @@ void wifi_manager_loop() {
     }
 
     // "Forget this network": drop the saved credentials and fall back to the setup AP.
-    if (g_forgetFlag) {
+    if (g_forgetFlag && (int32_t)(now - g_requestMs) >= (int32_t)REPLY_GRACE_MS) {
         g_forgetFlag = false;
         eraseCreds();
         memset(&g_cur, 0, sizeof(g_cur));
@@ -248,7 +253,7 @@ void wifi_manager_loop() {
 
     // A new network from the web UI: test it before replacing the saved one, so a typo can't strand
     // the board.
-    if (g_pendingFlag && g_state != WM_TRYING) {
+    if (g_pendingFlag && g_state != WM_TRYING && (int32_t)(now - g_requestMs) >= (int32_t)REPLY_GRACE_MS) {
         portENTER_CRITICAL(&g_mux);
         g_try = g_pending;
         g_pendingFlag = false;
@@ -355,6 +360,7 @@ void wifi_manager_register_routes(AsyncWebServer &server) {
 
     // POST /api/wifi/forget -- erase the saved network and open the setup AP.
     server.on("/api/wifi/forget", HTTP_POST, [](AsyncWebServerRequest *r) {
+        g_requestMs = millis();
         g_forgetFlag = true;
         r->send(200, "application/json", "{\"ok\":true}");
     });
@@ -386,6 +392,7 @@ void wifi_manager_register_routes(AsyncWebServer &server) {
         portENTER_CRITICAL(&g_mux);
         strlcpy(g_pending.ssid, ssid.c_str(), sizeof(g_pending.ssid));
         strlcpy(g_pending.pass, pass.c_str(), sizeof(g_pending.pass));
+        g_requestMs = millis();
         g_pendingFlag = true;
         portEXIT_CRITICAL(&g_mux);
         req->send(200, "application/json", "{\"ok\":true}");
@@ -398,4 +405,13 @@ bool wifi_manager_captive_redirect(AsyncWebServerRequest *request) {
     if (request->host() == ap) return false;        // a real 404 on our own address
     request->redirect("http://" + ap + "/#setup");
     return true;
+}
+
+bool wifi_manager_request_on_setup_ap(AsyncWebServerRequest *request) {
+    if (!g_apUp || request->client() == nullptr) return false;
+    return request->client()->localIP() == WiFi.softAPIP();   // the address the client connected to
+}
+
+bool wifi_manager_setup_ap_active() {
+    return g_apUp;
 }

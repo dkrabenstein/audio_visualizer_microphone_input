@@ -31,3 +31,10 @@ void wifi_manager_register_routes(AsyncWebServer &server);
 // While the setup AP is up, sends requests for unknown hosts to the setup page. This is what makes a
 // phone pop up the "sign in to network" screen. Returns true if it answered the request.
 bool wifi_manager_captive_redirect(AsyncWebServerRequest *request);
+
+// True if the request came in over the board's own setup network (not the home network). Joining it
+// needs the setup network's WPA2 password, so the API treats those clients as trusted.
+bool wifi_manager_request_on_setup_ap(AsyncWebServerRequest *request);
+
+// True while the board's setup access point is up.
+bool wifi_manager_setup_ap_active();
