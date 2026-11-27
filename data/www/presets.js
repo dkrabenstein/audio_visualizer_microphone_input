@@ -1,6 +1,6 @@
 // presets.js -- the built-in microphone patterns, uploaded to slots 0-6
 // whenever the page loads. Slot 0 is 'audio_reactive', the firmware's own default
-// (same formula as in src/main.cpp), so re-sending it changes nothing.
+// (same formula as in src/slot_store.cpp), so re-sending it changes nothing.
 //
 // These are the tested equations from README.md.
 //
@@ -68,7 +68,7 @@ const BASIC_SLOT = 8;
 
 // White light (Basic tab). The LEDs have no white chip, so a white is a red/green/blue mix
 // chosen by colour temperature (Tanner Helland's blackbody approximation). Keep whiteRGB() in
-// step with kelvinToRGB() in src/main.cpp, so the page previews exactly what the lights show.
+// step with kelvinToRGB() in src/light_state.cpp, so the page previews exactly what the lights show.
 const WHITE_MIN_K = 2000;   // deep warm (candle-like)
 const WHITE_MAX_K = 6500;   // cool daylight
 function whiteRGB(kelvin) {
