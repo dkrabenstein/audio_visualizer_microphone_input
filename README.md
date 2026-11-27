@@ -65,6 +65,14 @@ spectrum bars (tested)
 bass bloom (tested)
 .55 + 12*sat(bass*level*.5)*tri(x)
 
+- http_routes_begin() is still one 335-line function.
+- JSON body handling: the same buffer-and-parse code is copied in 4 places, in http_routes.cpp and wifi_manager.cpp.
+- wifi_manager.cpp at 422 lines and tabs.js at 586 lines are the next largest files.
+- The four LED buffers are still four copies of the same code.
+do this refactoring
+
+push to online
+
 /clear
 
 Update main to relect the online version. Make a new branch from main called feature/independent-strips and checkout the branch. Push the branch to online and set it as the upstream branch.
@@ -80,17 +88,11 @@ custom page: Add "Set all strips" and "Set single strip" buttons to replace the 
 
 make sure website looks good
 
-- Beat or tempo detection. You already have per-band energy, so a beat pulse for patterns to use is a natural next feature. Explain this
+- Beat or tempo detection. You already have per-band energy, so a beat pulse for patterns to use is a natural next feature. Make this feature
+
+Make a new pattern that utilizes the tempo detection feature. Just give the the equation, don't add a new pattern card
+
 - WebSocket or server-sent events instead of polling. One connection per page would replace repeated requests, which helps the connection limit we just hit. explain this
-
-- ask about current functionallity
-Is there any additional functionallity that would be worth adding?
-
-- ask about adding tests
-Are there any more tests that should be run?
-
-- ask about refactoring
-Is there any refactoring that needs to be done?
 
 - ask about resume portfolio viability
 Outside of documentation in the readme file, is there anything I should change before adding this project to my portfolio?
