@@ -34,3 +34,11 @@ JavaScript (web page and laptop server)
     dom_harness.js replaces fetch, timers and canvas with fakes: every request is recorded and answered
     by a route table, and page.tick(ms) moves a virtual clock, so nothing waits in real time.
     Not covered: real drawing and layout (jsdom has neither); that needs a real browser.
+
+On the real board (needs the board on Wi-Fi; USB only for the reset steps)
+    VIZ_PORT=COM3 node test/hardware/test_board.js
+    Not part of run_all.js. Checks the API guard on the real firmware (reads open, POSTs refused without /
+    with a wrong token, accepted with the right one) and NVS saving of the strip and mic settings (live
+    changes are lost on reboot, saved ones survive, reset forgets them, bad input is refused, values are
+    clamped). The token is read from include/secrets.h and never printed. Your strip and tuning settings are
+    put back at the end, saved copy included, and compared with the start. Takes about 2 minutes.
