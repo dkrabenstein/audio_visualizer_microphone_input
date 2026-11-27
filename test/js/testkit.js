@@ -17,6 +17,12 @@ function suite(name) {
       try { await body(); } catch (e) { fail++; console.log('FAIL: ' + label + ' threw ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e)); }
       finally { if (process.env.TEST_TIMING) console.log('  ' + (Date.now() - started) + ' ms  ' + label); }
     },
+    // For a file that cannot run in this setup (for example, it needs hardware in a particular state).
+    skip(reason) {
+      finished = true;
+      console.log(name + ': SKIPPED, ' + reason);
+      process.exit(0);
+    },
     done() {
       finished = true;
       console.log(name + ': ' + pass + ' passed, ' + fail + ' failed');

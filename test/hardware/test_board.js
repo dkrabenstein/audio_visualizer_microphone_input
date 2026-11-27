@@ -25,40 +25,10 @@ const { suite } = require('../js/testkit.js');
 
 const root = path.join(__dirname, '..', '..');
 const t = suite('board');
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ---- configuration
-const ini = fs.readFileSync(path.join(root, 'platformio.ini'), 'utf8');
-const HOST = process.env.VIZ_BOARD || (/upload_port\s*=\s*(\S+)/.exec(ini) || [])[1];
+// ---- configuration and HTTP client (shared with the other on-board tests)
+const { HOST, TOKEN, sleep, request, get, post } = require('./board_common.js');
 const PORT = process.env.VIZ_PORT || '';
-const secrets = fs.readFileSync(path.join(root, 'include', 'secrets.h'), 'utf8');
-const TOKEN = (/#define\s+API_TOKEN\s+"([^"]+)"/.exec(secrets) || [])[1];
-if (!HOST || !TOKEN) { console.log('FAIL: need the board address (VIZ_BOARD or upload_port) and API_TOKEN in include/secrets.h'); process.exit(1); }
-
-// ---- HTTP (a fresh connection each time: the board has few sockets)
-function request(method, urlPath, { token, body, headers } = {}) {
-  return new Promise(resolve => {
-    const h = Object.assign({}, headers || {});
-    if (token !== undefined) h['X-Api-Token'] = token;
-    let data;
-    if (body !== undefined) { data = typeof body === 'string' ? body : JSON.stringify(body); h['Content-Type'] = 'application/json'; h['Content-Length'] = Buffer.byteLength(data); }
-    const req = http.request({ host: HOST, port: 80, path: urlPath, method, headers: h, agent: false, timeout: 6000 }, res => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => {
-        const text = Buffer.concat(chunks).toString();
-        let json = null; try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
-        resolve({ status: res.statusCode, text, json, type: res.headers['content-type'] || '' });
-      });
-    });
-    req.on('timeout', () => { req.destroy(); resolve({ status: 0, text: '', json: null, type: '' }); });
-    req.on('error', () => resolve({ status: 0, text: '', json: null, type: '' }));
-    if (data) req.write(data);
-    req.end();
-  });
-}
-const get = p => request('GET', p);
-const post = (p, body, token = TOKEN) => request('POST', p, { token, body });
 
 // ---- state snapshots
 async function readStrips() { const j = (await get('/api/strips')).json; return { counts: j.counts, reversed: j.reversed }; }

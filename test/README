@@ -12,6 +12,10 @@ C++ (firmware logic, run on the laptop with PlatformIO's native platform + Unity
     test_strip_config  LED strip length / direction clamping (src/strip_config.h)
     test_api_guard     API token comparison and the allow/refuse rule (src/api_guard_logic.h)
     test_audio         microphone maths: dB -> 0..1, band means, smoothing, tuning clamps (src/audio_math.h)
+    test_audio_packet  the 48-byte UDP audio packet from the PC server: layout, field order, NaN/huge values
+                       are cleaned to 0..1 (src/audio_packet.h)
+    test_render        where each LED sits along its strip (0..1, reversed strips, one-LED strips) and how a
+                       pattern value becomes a hue byte (src/render_math.h)
     test_audio_dsp     microphone signal processing: 90 Hz high-pass, Hann window, FFT, band levels, the
                        sample ring (src/audio_dsp.h). Generated sine waves with known answers, no microphone.
 
@@ -29,7 +33,8 @@ JavaScript (web page and laptop server)
     test_compiler / test_differential   compiler.js, and its results against the firmware VM (needs g++)
     test_fuzz                           thousands of random programs, three ways: double-precision reference,
                                         browser preview, firmware VM. FUZZ_SEED=n FUZZ_N=20000 for more.
-    test_firmware_sync                  opcode table, ABI, default pattern, program fingerprint vs the firmware
+    test_firmware_sync                  opcode table, ABI, default pattern, program fingerprint, the UDP packet layout
+                                        and ports (server.js against the firmware)
     test_presets / test_fastled         presets.js and fastled.js
     test_index_html                     structure of the page; slotHash() and presetsOnBoard()
     test_server                         server/server.js, started for real on free ports
@@ -50,6 +55,22 @@ On the real board (needs the board on Wi-Fi; USB only for the reset steps)
     changes are lost on reboot, saved ones survive, reset forgets them, bad input is refused, values are
     clamped). The token is read from include/secrets.h and never printed. Your strip and tuning settings are
     put back at the end, saved copy included, and compared with the start. Takes about 2 minutes.
+
+    node test/hardware/test_board_api.js
+    The HTTP API beyond the guard: /api/pattern (everything it must refuse and what it accepts, 64 ops, a stack 16
+    deep, name handling, the program fingerprint against the web page's), /api/select, /api/power, /api/brightness,
+    /api/white (the colour the board reports against an independent calculation), and the safe parts of the Wi-Fi API
+    (status, scan, input validation). The lights DO change while it runs; it records the active pattern, power,
+    brightness and white first and puts them back, then checks a valid program is rendering. Patterns go only to one
+    spare slot, which keeps a small "hw_test" program afterwards (the API cannot delete a slot). It never sends a valid
+    Wi-Fi network and never calls /api/wifi/forget with the token. Takes about a minute.
+
+    The UDP audio path needs the board built with the UDP audio source, so it is a separate script:
+      PLATFORMIO_BUILD_FLAGS=-DAUDIO_USE_UDP pio run -e esp32-s3-devkitc-1-n32r16v -t upload
+      node test/hardware/test_udp_audio.js        (starts server/server.js, compares it with the board, then sends
+                                                   malformed packets; stop any dev server on this laptop first)
+      pio run -e esp32-s3-devkitc-1-n32r16v -t upload        (back to the microphone build)
+    With the normal build it reports SKIPPED. test/hardware/mic_levels.js prints the microphone levels.
 
 Automatic runs
     .github/workflows/tests.yml runs the native tests, the JavaScript tests and a firmware build on every push

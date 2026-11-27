@@ -26,9 +26,12 @@
 #include "pins.h"
 #include "expr_vm.h"
 #include "audio_source.h"
+#include "audio_packet.h"
+#include "render_math.h"
 #include "strip_config.h"
 #include "wifi_manager.h"
 #include "api_guard.h"
+#include "json_body.h"
 
 // Audio source: on-board I2S mic by default. Build with -DAUDIO_USE_UDP to take
 // features from the PC's UDP stream instead (handy for testing without a mic).
@@ -246,14 +249,7 @@ uint32_t CappedWebServer::refused = 0;
 
 static CappedWebServer server(80);
 
-// Binary payload layout matching the PC UDP sender
-struct __attribute__((packed)) AudioPayload {
-    float bands[8];
-    float level;
-    float bass;
-    float mid;
-    float treb;
-};
+// The UDP audio packet from the PC sender (struct AudioPayload) is declared in audio_packet.h.
 
 // ---------------------------------------------------------------- LED Config
 // How many LEDs each strip drives, and which end is x=0, come from strip_config.h
@@ -421,7 +417,14 @@ static void handlePatternBody(AsyncWebServerRequest *req, uint8_t *data,
             req->send(400, "application/json", "{\"error\":\"bad op\"}");
             return;
         }
-        p.ops[p.count].op  = (uint8_t)(op[0] | 255);
+        // An opcode is one byte. Read it as a whole number first, so a value such as 272 is refused instead of
+        // being cut down to 16 (add). `| -1` gives -1 when the value is not a whole number at all.
+        const int opcode = op[0] | -1;
+        if (opcode < 0 || opcode > 255) {
+            req->send(400, "application/json", "{\"error\":\"opcode must be a whole number 0-255\"}");
+            return;
+        }
+        p.ops[p.count].op  = (uint8_t)opcode;
         p.ops[p.count].arg = op.size() > 1 ? (float)(op[1] | 0.0f) : 0.0f;
         p.count++;
     }
@@ -477,21 +480,29 @@ static void setupHttpRoutes() {
 
     // POST /api/pattern
     server.on("/api/pattern", HTTP_POST,
-              [](AsyncWebServerRequest *r) {}, nullptr, handlePatternBody);
+              reject_empty_body, nullptr, handlePatternBody);
 
     // POST /api/select
     server.on("/api/select", HTTP_POST, [](AsyncWebServerRequest *r) {
-        int slot = -1;
+        String value;
         if (r->hasParam("slot", true)) {
-            slot = r->getParam("slot", true)->value().toInt();
+            value = r->getParam("slot", true)->value();
         } else if (r->hasParam("slot", false)) {
-            slot = r->getParam("slot", false)->value().toInt();
+            value = r->getParam("slot", false)->value();
         } else {
             r->send(400, "application/json", "{\"error\":\"missing slot parameter\"}");
             return;
         }
+        // Only a plain whole number counts. toInt() on its own reads "3abc" as 3 and "abc" or "" as 0, which would
+        // select a slot nobody asked for. Same rule as /api/brightness and /api/white.
+        const int slot = value.toInt();
+        if (String(slot) != value) {
+            r->send(400, "application/json", "{\"error\":\"slot must be a whole number\"}");
+            return;
+        }
 
-        if (!ram_store_activate((uint8_t)slot)) {
+        // Check the range before the cast to a byte, or 256 would wrap round to slot 0.
+        if (slot < 0 || slot >= NUM_SLOTS || !ram_store_activate((uint8_t)slot)) {
             r->send(400, "application/json", "{\"error\":\"invalid slot index\"}");
             return;
         }
@@ -677,7 +688,7 @@ static void setupHttpRoutes() {
     // POST /api/tuning  JSON {floors:[8], margin, minCeil, smoothness} -- any field optional.
     // Applies live; not saved until POST /api/mic/save.
     server.on("/api/tuning", HTTP_POST,
-              [](AsyncWebServerRequest *r) {}, nullptr,
+              reject_empty_body, nullptr,
               [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
         static String buf;
         if (index == 0) buf = "";
@@ -747,7 +758,7 @@ static void setupHttpRoutes() {
     // POST /api/strips  JSON {counts:[4], reversed:[4]} -- either field optional.
     // Applies live; not saved until POST /api/leds/save.
     server.on("/api/strips", HTTP_POST,
-              [](AsyncWebServerRequest *r) {}, nullptr,
+              reject_empty_body, nullptr,
               [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
         static String buf;
         if (index == 0) buf = "";
@@ -900,16 +911,19 @@ static void networkTask(void *) {
         }
 
         int packetSize = connected ? udp.parsePacket() : 0;
-        if (packetSize >= (int)sizeof(AudioPayload)) {
-            udp.read((char*)&packet, sizeof(AudioPayload));
+        if (packetSize > 0) {
+            if (packetSize >= (int)sizeof(AudioPayload)) {
+                udp.read((char*)&packet, sizeof(AudioPayload));
 
-            AudioFeatures f;
-            for (int i = 0; i < 8; i++) f.bands[i] = packet.bands[i];
-            f.level = packet.level;
-            f.bass  = packet.bass;
-            f.mid   = packet.mid;
-            f.treb  = packet.treb;
-            audio_source_push_udp(f);  // ignored while the mic is the active source
+                AudioFeatures f;
+                audio_payload_to_features(packet, &f);   // clamps to 0..1, NaN -> 0 (audio_packet.h)
+                audio_source_push_udp(f);  // ignored while the mic is the active source
+            }
+            // Throw away whatever is left of this packet. WiFiUDP::parsePacket() returns 0 for as long as the previous
+            // packet is still buffered, and read() only frees it once every byte has been taken. A packet shorter
+            // than 48 bytes (never read) or longer (only the first 48 read) would otherwise block every later
+            // packet until the board is rebooted, and the UDP port accepts packets from anyone on the network.
+            udp.flush();
         }
 
         settingsAutosave();
@@ -989,18 +1003,17 @@ static void renderTask(void *) {
                 g_outCount[s] = count;
             }
 
-            const float invN = (count > 1) ? (1.0f / (float)(count - 1)) : 0.0f;
+            const float invN = strip_inv_span(count);
 
             if (whiteK) {
                 fill_solid(strip, count, whiteRGB);   // white light: no pattern to evaluate
             } else {
                 for (uint16_t i = 0; i < count; i++) {
                     // x runs 0..1 from the first LED, or from the last one when reversed.
-                    c.x = (float)(sc.reversed[s] ? (count - 1 - i) : i) * invN;
+                    c.x = strip_x(i, count, sc.reversed[s] != 0, invN);
                     const float v = expr_eval(prog, &c);
 
-                    float h = v - floorf(v);
-                    strip[i] = CHSV((uint8_t)(h * 255.0f), 240, 255);
+                    strip[i] = CHSV(pattern_hue(v), 240, 255);
                 }
             }
 

@@ -83,5 +83,36 @@ try {
   }
 } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp cleanup */ } }
 
+// ---- UDP audio packet: the sender (server/server.js) against the receiver (src/audio_packet.h)
+{
+  const serverJs = fs.readFileSync(path.join(root, 'server', 'server.js'), 'utf8');
+  const packetH = fs.readFileSync(path.join(root, 'src', 'audio_packet.h'), 'utf8');
+
+  // Receiver: field order and sizes from the packed struct.
+  const body = /struct __attribute__\(\(packed\)\) AudioPayload \{([\s\S]*?)\};/.exec(packetH);
+  ok(!!body, 'found struct AudioPayload in audio_packet.h');
+  const recv = {}; let offset = 0;
+  if (body) for (const m of body[1].matchAll(/float\s+(\w+)(?:\[(\d+)\])?\s*;/g)) { recv[m[1]] = offset; offset += 4 * (m[2] ? Number(m[2]) : 1); }
+  const bandCount = body ? Number((/float\s+bands\[(\d+)\]/.exec(body[1]) || [])[1]) : 0;
+  const recvSize = offset;
+
+  // Sender: the buffer size and every writeFloatLE offset.
+  const alloc = Number((/Buffer\.alloc\((\d+)\)/.exec(serverJs) || [])[1]);
+  const bandLoop = /for \(let i = 0; i < (\d+); i\+\+\) \{\s*buf\.writeFloatLE\(audioState\.bands\[i\], i \* 4\);/.exec(serverJs);
+  const sent = {}; for (const m of serverJs.matchAll(/buf\.writeFloatLE\(audioState\.(level|bass|mid|treb),\s*(\d+)\)/g)) sent[m[1]] = Number(m[2]);
+
+  ok(alloc === recvSize, 'packet size: server.js sends ' + alloc + ' bytes, the firmware struct is ' + recvSize);
+  ok(!!bandLoop && Number(bandLoop[1]) === bandCount && recv.bands === 0, 'bands: server.js writes ' + (bandLoop ? bandLoop[1] : '?') + ' floats from offset 0, the struct has ' + bandCount + ' at ' + recv.bands);
+  for (const name of ['level', 'bass', 'mid', 'treb']) ok(sent[name] === recv[name], name + ' offset: server.js ' + sent[name] + ', firmware ' + recv[name]);
+
+  // Ports and the discovery beacon text, which both sides spell out.
+  const num = (text, re) => Number((re.exec(text) || [])[1]);
+  ok(num(serverJs, /const UDP_PORT = Number\(process\.env\.VIZ_UDP_PORT\) \|\| (\d+);/) === num(mainCpp, /const uint16_t UDP_PORT = (\d+);/), 'UDP audio port: server.js and main.cpp agree');
+  ok(num(serverJs, /const BEACON_PORT = Number\(process\.env\.VIZ_BEACON_PORT\) \|\| (\d+);/) === num(mainCpp, /const uint16_t BEACON_PORT = (\d+);/), 'beacon port: server.js and main.cpp agree');
+  const beaconMain = (/beaconUdp\.write\(\(const uint8_t\*\)"(\w+)", (\d+)\)/.exec(mainCpp) || []);
+  const beaconServer = (/msg\.toString\(\) !== '(\w+)'/.exec(serverJs) || [])[1];
+  ok(beaconMain[1] === beaconServer && Number(beaconMain[2]) === beaconMain[1].length, 'beacon text: main.cpp sends "' + beaconMain[1] + '", server.js listens for "' + beaconServer + '"');
+}
+
 console.log('firmware sync: ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
