@@ -108,8 +108,15 @@ async function start(host, ports) {
     ok(/window\.VIZ_LAPTOP\s*=\s*true/.test(host.body.toString()), '/host.js sets window.VIZ_LAPTOP = true');
 
     // ---- directory traversal must stay inside data/www
-    for (const p of ['/../server/server.js', '/%2e%2e/server/server.js', '/..%5cserver%5cserver.js', '/..%2fserver%2fserver.js', '/%2e%2e%2f%2e%2e%2fplatformio.ini'])
+    for (const p of ['/../server/server.js', '/%2e%2e/server/server.js', '/..%2fserver%2fserver.js', '/%2e%2e%2f%2e%2e%2fplatformio.ini'])
       ok(statusOf(await raw(A.http, p)) === 403, 'path ' + p + ' is forbidden (403)');
+    // A backslash is a folder separator only on Windows. There, "..\server\server.js" climbs out of data/www and is
+    // refused (403). On Linux and macOS it is just an odd file name inside data/www that does not exist (404). Either
+    // way nothing outside data/www may be served.
+    const backslash = await raw(A.http, '/..%5cserver%5cserver.js');
+    ok(statusOf(backslash) === (process.platform === 'win32' ? 403 : 404), 'path /..%5cserver%5cserver.js is refused (403 on Windows, 404 elsewhere); got ' + statusOf(backslash));
+    for (const p of ['/../server/server.js', '/%2e%2e/server/server.js', '/..%5cserver%5cserver.js', '/..%2fserver%2fserver.js', '/%2e%2e%2f%2e%2e%2fplatformio.ini'])
+      ok(!/createServer|\[env:/.test(await raw(A.http, p)), 'path ' + p + ' never returns the contents of a file outside data/www');
 
     // ---- /api/audio
     const au = JSON.parse((await get(A.http, '/api/audio')).body.toString());
