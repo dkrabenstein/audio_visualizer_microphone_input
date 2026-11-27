@@ -19,6 +19,8 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <FastLED.h>
+#include <esp_system.h>
+#include <esp_timer.h>
 
 #include "secrets.h"
 #include "pins.h"
@@ -89,6 +91,22 @@ static bool slotSameAs(const RamSlot& s, const char* name, const ExprProgram* p)
         if (s.program.ops[i].op != p->ops[i].op || s.program.ops[i].arg != p->ops[i].arg) return false;
     }
     return true;
+}
+
+// A fingerprint of a program's contents (FNV-1a, 32 bit, over each op's code byte and its four
+// argument bytes, little-endian). /api/slots publishes it so the web page can tell whether the
+// board already holds exactly the program it is about to upload, even when an edit left the name and
+// the op count unchanged. The page computes the same value from its compiled code (slotHash() in
+// index.html); the two must stay in step. It is a change detector, not a security check.
+static uint32_t programHash(const ExprProgram& p) {
+    uint32_t h = 2166136261u;
+    for (uint8_t i = 0; i < p.count; i++) {
+        h = (h ^ p.ops[i].op) * 16777619u;
+        uint8_t b[sizeof(float)];
+        memcpy(b, &p.ops[i].arg, sizeof(float));   // the ESP32 is little-endian
+        for (size_t k = 0; k < sizeof(float); k++) h = (h ^ b[k]) * 16777619u;
+    }
+    return h;
 }
 
 static bool slotPersist(uint8_t slot) {
@@ -543,9 +561,45 @@ static void setupHttpRoutes() {
             o["used"] = g_slots[i].used;
             o["name"] = g_slots[i].name; 
             o["ops"] = g_slots[i].program.count;
+            if (g_slots[i].used) {
+                char hx[9];
+                snprintf(hx, sizeof(hx), "%08x", (unsigned)programHash(g_slots[i].program));
+                o["hash"] = hx;   // see programHash(); ArduinoJson copies the string
+            }
         }
 
         String s; 
+        serializeJson(d, s);
+        r->send(200, "application/json", s);
+    });
+
+    // GET /api/status -- health numbers for the Setup tab's Diagnostics panel, read-only.
+    // resetReason says why the board last restarted, so a crash can be diagnosed without a USB cable.
+    server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *r) {
+        const char *reason;
+        bool abnormal = false;   // a restart the firmware did not ask for
+        switch (esp_reset_reason()) {
+            case ESP_RST_POWERON:   reason = "power on"; break;
+            case ESP_RST_SW:        reason = "software restart"; break;
+            case ESP_RST_DEEPSLEEP: reason = "wake from deep sleep"; break;
+            case ESP_RST_EXT:       reason = "reset pin"; break;
+            case ESP_RST_PANIC:     reason = "panic (crash)"; abnormal = true; break;
+            case ESP_RST_INT_WDT:   reason = "interrupt watchdog"; abnormal = true; break;
+            case ESP_RST_TASK_WDT:  reason = "task watchdog"; abnormal = true; break;
+            case ESP_RST_WDT:       reason = "other watchdog"; abnormal = true; break;
+            case ESP_RST_BROWNOUT:  reason = "brownout (supply dipped)"; abnormal = true; break;
+            default:                reason = "unknown"; break;
+        }
+        JsonDocument d;
+        d["uptimeS"] = (uint32_t)(esp_timer_get_time() / 1000000);   // millis() wraps at 49 days; this does not
+        d["resetReason"] = reason;
+        d["abnormalReset"] = abnormal;
+        d["freeHeap"] = ESP.getFreeHeap();
+        d["minFreeHeap"] = ESP.getMinFreeHeap();   // lowest since boot: shows leaks and near misses
+        d["wifiConnected"] = WiFi.status() == WL_CONNECTED;
+        d["rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
+        d["refused"] = CappedWebServer::refused;
+        String s;
         serializeJson(d, s);
         r->send(200, "application/json", s);
     });

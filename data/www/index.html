@@ -499,6 +499,12 @@ details.fold>summary:hover{color:var(--fg)!important}
     </div>
   </div>
 
+  <div class="panel" id="diag-panel">
+    <label>Diagnostics</label>
+    <div class="meta" style="margin:0 0 12px">Health of the board. The restart reason tells you why it last rebooted, so a crash shows up here without a USB cable.</div>
+    <div id="diag-rows" class="meta" style="margin:0;line-height:1.9">checking&hellip;</div>
+  </div>
+
   <div class="panel">
     <label>live sound</label>
     <canvas id="setup-meter" width="640" height="130" style="height:130px"></canvas>
@@ -518,6 +524,9 @@ details.fold>summary:hover{color:var(--fg)!important}
 // an "X-Api-Token" header. Rather than touch every fetch() in this page, fetch is wrapped once here:
 // it adds the saved token to POSTs meant for the board, and if the board answers 401 it asks for the
 // token in a small dialog (once per browser, kept in localStorage) and sends the request again.
+// A request the page sends on its own (not because of something the person did) is marked
+// { background: true }. Those never raise the dialog: without a token they just get their 401 back,
+// so a first-time visitor is not met by a token prompt before they have touched anything.
 (function () {
   var KEY = 'viz_api_token';
   var realFetch = window.fetch.bind(window);
@@ -604,6 +613,10 @@ details.fold>summary:hover{color:var(--fg)!important}
     }
     var sent = saved();
     var res = await realFetch(input, withToken(init, sent));
+    if (init && init.background === true) {
+      if (res.status === 401 && sent) save('');   // a refused token is wrong; the next real action asks again
+      return res;
+    }
     var note = '';
     if (res.status === 401 && sent) {      // the board refused the token we had: it is wrong, so drop it
       save('');
@@ -874,12 +887,10 @@ async function poll() {
   try {
     const j = await (await fetch(apiBase() + '/api/slots')).json();
     document.dispatchEvent(new CustomEvent('devstate', { detail: j }));
-    // Presets live in the board's RAM, so a reboot or reflash empties them. If the last preset
-    // slot is unused, send them again (slot 0 always holds the firmware default, so it can't be
-    // the test). The cooldown stops a failing upload from re-triggering itself through the
-    // poll() at the end of uploadPresets().
-    const first = (j.slots || []).find(s => s.i === PRESET_FIRST_SLOT + PRESETS.length - 1);
-    if (first && !first.used && Date.now() - presetHealAt > 10000) {
+    // If the board is missing a preset (a fresh or erased board, or presets.js changed), send them
+    // again. The cooldown stops a failing upload from re-triggering itself through the poll() at the
+    // end of uploadPresets().
+    if (j.slots && !presetsOnBoard(j.slots) && Date.now() - presetHealAt > 10000) {
       presetHealAt = Date.now();
       uploadPresets();
     }
@@ -902,26 +913,78 @@ PRESETS.forEach((p, n) => {
   $('#examples').appendChild(el);
 });
 
-// Upload every preset to its own slot (PRESET_FIRST_SLOT onward). Only /api/pattern is called, never
-// /api/select, so the running pattern is not interrupted.
+// Fingerprint of a compiled program, matching programHash() in the firmware (FNV-1a over each op's
+// code byte and its argument as a little-endian 32-bit float). /api/slots reports it per slot.
+function slotHash(code) {
+  let h = 2166136261 >>> 0;
+  const f = new DataView(new ArrayBuffer(4));
+  const eat = b => { h = Math.imul((h ^ b) >>> 0, 16777619) >>> 0; };
+  for (const op of code) {
+    eat(op[0] & 255);
+    f.setFloat32(0, (op.length > 1 ? op[1] : 0) + 0, true);   // "+ 0" turns -0 into 0, as JSON does
+    for (let k = 0; k < 4; k++) eat(f.getUint8(k));
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+// True when every preset slot on the board already holds that exact preset: same name and the same
+// program (compared by fingerprint, so an edit that keeps the name and length is still noticed). The
+// board keeps its slots in flash, so after the first upload this is normally true and a page load
+// needs no POSTs at all. A board whose firmware predates the fingerprint is compared by name and
+// op count only.
+function presetsOnBoard(slots) {
+  return PRESETS.every((p, n) => {
+    const s = (slots || []).find(x => x.i === PRESET_FIRST_SLOT + n);
+    if (!s || !s.used || s.name !== p.name) return false;
+    const code = compile(p.expr);
+    return s.hash !== undefined ? s.hash === slotHash(code) : s.ops === code.length;
+  });
+}
+
+// Upload the presets the board is missing, each to its own slot (PRESET_FIRST_SLOT onward). Only
+// /api/pattern is called, never /api/select, so the running pattern is not interrupted. These are the
+// page's own requests, so they are sent as background and never raise the token dialog.
 let presetsBusy = false;
 async function uploadPresets() {
   if (presetsBusy) return;   // overlapping uploads would interleave in the board's request buffer
   presetsBusy = true;
   try {
+    try {
+      const j = await (await fetch(apiBase() + '/api/slots')).json();
+      if (presetsOnBoard(j.slots)) {
+        $('#status').className = 'ok';
+        $('#status').textContent = '✓ patterns already on the board';
+        presetsBusy = false;
+        poll();
+        return;
+      }
+    } catch (e) { /* cannot tell what the board holds: upload them to be safe */ }
     for (let n = 0; n < PRESETS.length; n++) {
       const p = PRESETS[n], slot = PRESET_FIRST_SLOT + n;
       const r = await fetch(apiBase() + '/api/pattern', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(toPayload(p.name, slot, compile(p.expr)))
+        body: JSON.stringify(toPayload(p.name, slot, compile(p.expr))),
+        background: true
       });
+      if (r.status === 401) {
+        const e = new Error('no API token in this browser yet');
+        e.needsToken = true;
+        throw e;
+      }
       if (!r.ok) throw new Error(p.name + ': ' + ((await r.json()).error || r.status));
     }
     $('#status').className = 'ok';
     $('#status').textContent = '✓ patterns loaded';
   } catch (e) {
-    $('#status').className = 'err';
-    $('#status').textContent = '✗ preset upload: ' + e.message;
+    if (e.needsToken) {
+      // Try again in a minute: by then the person may have entered the token for something else.
+      presetHealAt = Date.now() + 50000;
+      $('#status').className = '';
+      $('#status').textContent = 'patterns not loaded yet: this browser has no API token (it is asked for when you change something)';
+    } else {
+      $('#status').className = 'err';
+      $('#status').textContent = '✗ preset upload: ' + e.message;
+    }
   }
   presetsBusy = false;
   poll();
@@ -1758,6 +1821,49 @@ if (!ON_LAPTOP) uploadPresets();
 
   setInterval(refresh, 3000);
   setTimeout(refresh, 300);
+})();
+</script>
+<script>
+// ---- Diagnostics (Setup tab) ----
+// Reads /api/status every few seconds while the Setup tab is open.
+(function () {
+  var box = document.getElementById('diag-rows');
+  if (!box) return;
+  function base() { return (typeof espUrl === 'function') ? espUrl() : ''; }
+  function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+  function up(s) {
+    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    return (d ? d + ' d ' : '') + (d || h ? h + ' h ' : '') + m + ' min' + (d || h || m ? '' : ' ' + s + ' s');
+  }
+  function row(k, v, bad) {
+    return '<div style="display:flex;justify-content:space-between;gap:12px"><span>' + k + '</span>' +
+      '<span style="color:' + (bad ? 'var(--err)' : 'var(--fg)') + '">' + v + '</span></div>';
+  }
+  function signal(r) {
+    var q = r >= -60 ? 'good' : r >= -70 ? 'fair' : 'weak';
+    return r + ' dBm (' + q + ')';
+  }
+  async function refresh() {
+    if (document.hidden) return;
+    var tab = document.getElementById('tab-setup');
+    if (tab && !tab.classList.contains('active')) return;
+    var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 2500);
+    try {
+      var j = await (await fetch(base() + '/api/status', { signal: ctl.signal })).json();
+      box.innerHTML =
+        row('uptime', up(j.uptimeS)) +
+        row('last restart', esc(j.resetReason), j.abnormalReset) +
+        row('free memory', Math.round(j.freeHeap / 1024) + ' kB (lowest ' + Math.round(j.minFreeHeap / 1024) + ' kB)') +
+        row('Wi-Fi signal', j.wifiConnected ? signal(j.rssi) : 'not connected') +
+        row('refused connections', j.refused + ' since boot');
+    } catch (e) { box.textContent = 'board not reachable'; }
+    finally { clearTimeout(to); }
+  }
+  setInterval(refresh, 3000);
+  setTimeout(refresh, 400);
+  document.querySelectorAll('[data-tab="setup"], [data-go="setup"]').forEach(function (b) {
+    b.addEventListener('click', function () { setTimeout(refresh, 50); });
+  });
 })();
 </script>
 <script>
