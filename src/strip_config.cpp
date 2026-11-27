@@ -25,12 +25,7 @@ void strip_config_get(StripConfig *out) {
 }
 
 void strip_config_set(const StripConfig &in) {
-    StripConfig c = in;
-    for (int s = 0; s < NUM_STRIPS; s++) {
-        if (c.count[s] < 1) c.count[s] = 1;
-        if (c.count[s] > STRIP_MAX_LEDS) c.count[s] = STRIP_MAX_LEDS;
-        c.reversed[s] = c.reversed[s] ? 1 : 0;
-    }
+    const StripConfig c = strip_config_sanitized(in);
     portENTER_CRITICAL(&g_cfgMux);
     g_cfg = c;
     portEXIT_CRITICAL(&g_cfgMux);

@@ -1,4 +1,4 @@
-const {compile, evalCode, CompileError} = require('../web/compiler.js');
+const {compile, evalCode, CompileError} = require('./load_compiler.js');
 let pass=0, fail=0;
 function ok(c,m){ if(c){pass++;} else {fail++; console.log("FAIL:",m);} }
 

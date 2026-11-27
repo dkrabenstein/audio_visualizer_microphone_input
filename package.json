@@ -1,0 +1,11 @@
+{
+  "name": "audio-visualizer-tests",
+  "private": true,
+  "description": "Development-only tooling: JavaScript tests for the web UI and the laptop dev server. Not part of the firmware.",
+  "scripts": {
+    "test": "node test/js/run_all.js"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  }
+}

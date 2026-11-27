@@ -5,6 +5,7 @@
 //   -> 8 log-spaced bands -> dB -> adaptive 0..1 mapping -> attack/decay smoothing
 
 #include "audio_source.h"
+#include "audio_math.h"
 #include "pins.h"
 
 #include <Arduino.h>
@@ -29,7 +30,6 @@ static const uint16_t BAND_EDGES[9] = { 1, 3, 5, 9, 16, 30, 60, 130, 300 };
 // The top of the window follows the loudest band (fast up, slow down) so quiet
 // rooms and loud rooms both use the full 0..1 range. The bottom of the window is a
 // per-band noise floor table (tunable, see AudioTuning).
-#define MIN_RANGE_DB  (12.0f)   // smallest ceiling-to-floor span, avoids divide-by-~0
 #define CEIL_FALL_DB  (0.02f)   // dB the ceiling drops per spectrum (~2 dB/s)
 
 // Per-band noise floor: a fixed table (AudioTuning::floorDb) set from the web UI,
@@ -227,26 +227,16 @@ static void analyse_block() {
     const float dt     = (float)HOP_N / (float)SAMPLE_RATE;                 // seconds between spectra
     const float tauAtk = (SMOOTH_ATTACK_BASE_MS  + SMOOTH_ATTACK_SLOPE  * t.smoothness) * 0.001f;
     const float tauRel = (SMOOTH_RELEASE_BASE_MS + SMOOTH_RELEASE_SLOPE * t.smoothness) * 0.001f;
-    const float aAtk   = 1.0f - expf(-dt / tauAtk);
-    const float aRel   = 1.0f - expf(-dt / tauRel);
+    const float aAtk   = audio_smooth_alpha(dt, tauAtk);
+    const float aRel   = audio_smooth_alpha(dt, tauRel);
 
     AudioFeatures f;
-    float sum = 0.0f;
     for (int b = 0; b < 8; b++) {
-        const float bottom = t.floorDb[b] + t.marginDb;
-        float span = g_ceilDb - bottom;
-        if (span < MIN_RANGE_DB) span = MIN_RANGE_DB;
-        float v = (db[b] - bottom) / span;
-        v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
-        // Follow the target: quickly when it rises, more slowly when it falls.
-        g_smooth[b] += (v - g_smooth[b]) * (v > g_smooth[b] ? aAtk : aRel);
+        const float v = audio_band_value(db[b], t.floorDb[b], t.marginDb, g_ceilDb);
+        g_smooth[b] = audio_smooth_step(g_smooth[b], v, aAtk, aRel);
         f.bands[b] = g_smooth[b];
-        sum += g_smooth[b];
     }
-    f.level = sum / 8.0f;
-    f.bass  = (f.bands[0] + f.bands[1]) / 2.0f;
-    f.mid   = (f.bands[2] + f.bands[3] + f.bands[4]) / 3.0f;
-    f.treb  = (f.bands[5] + f.bands[6] + f.bands[7]) / 3.0f;
+    audio_aggregate(&f);
 
     portENTER_CRITICAL(&g_featMux);
     g_features = f;
@@ -255,8 +245,6 @@ static void analyse_block() {
 }
 
 // ---------------------------------------------------------------- Tuning API
-static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
-
 void audio_tuning_defaults(AudioTuning *out) { *out = TUNE_DEFAULT; }
 
 void audio_tuning_get(AudioTuning *out, float rawDb[8], bool *calibrating) {
@@ -268,11 +256,7 @@ void audio_tuning_get(AudioTuning *out, float rawDb[8], bool *calibrating) {
 }
 
 void audio_tuning_set(const AudioTuning &in) {
-    AudioTuning t = in;
-    for (int b = 0; b < 8; b++) t.floorDb[b] = clampf(t.floorDb[b], -120.0f, -20.0f);
-    t.marginDb   = clampf(t.marginDb,   0.0f,   20.0f);
-    t.minCeilDb  = clampf(t.minCeilDb,  -80.0f, -20.0f);
-    t.smoothness = clampf(t.smoothness, 0.0f,   100.0f);
+    const AudioTuning t = audio_tuning_clamped(in);
     portENTER_CRITICAL(&g_featMux);
     g_tune = t;
     portEXIT_CRITICAL(&g_featMux);

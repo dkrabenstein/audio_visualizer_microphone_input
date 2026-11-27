@@ -1,11 +1,36 @@
+Tests
+=====
 
-This directory is intended for PlatformIO Test Runner and project tests.
+None of these need the board.
 
-Unit Testing is a software testing method by which individual units of
-source code, sets of one or more MCU program modules together with associated
-control data, usage procedures, and operating procedures, are tested to
-determine whether they are fit for use. Unit testing finds problems early
-in the development cycle.
+C++ (firmware logic, run on the laptop with PlatformIO's native platform + Unity)
+    pio test -e native                  all suites
+    pio test -e native -f test_vm       one suite
 
-More information about PlatformIO Unit Testing:
-- https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+    test_vm            expression VM: validator, every opcode, guarded maths, limits (src/expr_vm.cpp)
+    test_strip_config  LED strip length / direction clamping (src/strip_config.h)
+    test_api_guard     API token comparison and the allow/refuse rule (src/api_guard_logic.h)
+    test_audio         microphone maths: dB -> 0..1, band means, smoothing, tuning clamps (src/audio_math.h)
+
+    The logic under test lives in headers/files without Arduino or FreeRTOS includes, so it compiles
+    on the laptop. The thin hardware wrappers (api_guard.cpp, the I2S capture) are not covered here.
+
+JavaScript (web page and laptop server)
+    npm install                         once: installs jsdom (a fake browser, development only)
+    node test/js/run_all.js             everything below, files in parallel (also: npm test), about 12 s
+    node test/js/test_server.js         one file
+
+    test_compiler / test_differential   compiler.js, and its results against the firmware VM (needs g++)
+    test_firmware_sync                  opcode table, ABI, default pattern, program fingerprint vs the firmware
+    test_presets / test_fastled         presets.js and fastled.js
+    test_index_html                     structure of the page; slotHash() and presetsOnBoard()
+    test_server                         server/server.js, started for real on free ports
+    test_page_*                         the real index.html run in jsdom (see dom_harness.js):
+                                          token  - API token wrapper, dialog, pairing link
+                                          core   - tabs, idle sleep, Custom tab, preset upload, laptop mode
+                                          tabs   - Patterns, Basic (wheel, white), Home, power, brightness
+                                          setup  - strips, mic tuning, Wi-Fi, diagnostics
+
+    dom_harness.js replaces fetch, timers and canvas with fakes: every request is recorded and answered
+    by a route table, and page.tick(ms) moves a virtual clock, so nothing waits in real time.
+    Not covered: real drawing and layout (jsdom has neither); that needs a real browser.
