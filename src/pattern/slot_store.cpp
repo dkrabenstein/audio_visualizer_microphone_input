@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "pattern/slot_store.h"
+#include "pattern/slot_blob.h"
 
 // ---------------------------------------------------------------- RAM Pattern Storage
 static RamSlot g_slots[NUM_SLOTS] = {};
@@ -30,16 +31,10 @@ bool ram_store_activate(uint8_t slot) {
 }
 
 // ---- Persistence (NVS) ----
-// The RAM slots are the working copy; NVS (flash) keeps them across reboots. Each slot is one
-// small blob in namespace "slots", key "s<N>":
-//   [0] version  [1] op count  [2..33] name (32 bytes)  [34..] count x { op (1 byte), arg (float, 4 bytes) }
-// Ops are packed without the struct's padding, so a typical pattern is a few hundred bytes. The
-// default NVS partition is 20 KB; 16 slots at the worst case of 64 ops (~350 B each) still fit.
+// The RAM slots are the working copy; NVS (flash) keeps them across reboots. The byte layout of a stored slot,
+// and the checks applied when reading one back, are in slot_blob.h (unit tested).
 // Flash is only written when a slot's content actually changed: the web page re-uploads its
 // presets on every load, and rewriting identical data each time would wear the flash and stall.
-#define SLOT_BLOB_VERSION 1
-#define SLOT_BLOB_HEAD    34
-#define SLOT_OP_BYTES     5
 
 static bool slotSameAs(const RamSlot& s, const char* name, const ExprProgram* p) {
     if (!s.used || strncmp(s.name, name, sizeof(s.name)) != 0 || s.program.count != p->count) return false;
@@ -51,17 +46,9 @@ static bool slotSameAs(const RamSlot& s, const char* name, const ExprProgram* p)
 
 
 static bool slotPersist(uint8_t slot) {
-    uint8_t blob[SLOT_BLOB_HEAD + EXPR_MAX_OPS * SLOT_OP_BYTES] = {};
+    uint8_t blob[SLOT_BLOB_MAX];
     const RamSlot& s = g_slots[slot];
-    blob[0] = SLOT_BLOB_VERSION;
-    blob[1] = s.program.count;
-    memcpy(blob + 2, s.name, sizeof(s.name));
-    for (uint8_t i = 0; i < s.program.count; i++) {
-        uint8_t* o = blob + SLOT_BLOB_HEAD + i * SLOT_OP_BYTES;
-        o[0] = s.program.ops[i].op;
-        memcpy(o + 1, &s.program.ops[i].arg, sizeof(float));
-    }
-    const size_t len = SLOT_BLOB_HEAD + (size_t)s.program.count * SLOT_OP_BYTES;
+    const size_t len = slot_blob_encode(s.name, s.program, blob);
     Preferences pr;
     if (!pr.begin("slots", false)) return false;
     char key[8];
@@ -74,29 +61,20 @@ static bool slotPersist(uint8_t slot) {
 // Reads one slot back from NVS into g_slots. Anything that fails validation is ignored, because
 // expr_eval() has no bounds checks and must never see a corrupt program.
 static bool slotLoad(uint8_t slot) {
-    uint8_t blob[SLOT_BLOB_HEAD + EXPR_MAX_OPS * SLOT_OP_BYTES];
+    uint8_t blob[SLOT_BLOB_MAX];
     Preferences pr;
     if (!pr.begin("slots", true)) return false;
     char key[8];
     snprintf(key, sizeof(key), "s%u", (unsigned)slot);
     const size_t len = pr.getBytes(key, blob, sizeof(blob));
     pr.end();
-    if (len < SLOT_BLOB_HEAD || blob[0] != SLOT_BLOB_VERSION) return false;
-    const uint8_t count = blob[1];
-    if (count == 0 || count > EXPR_MAX_OPS || len != SLOT_BLOB_HEAD + (size_t)count * SLOT_OP_BYTES) return false;
 
-    ExprProgram p{};
-    p.count = count;
-    for (uint8_t i = 0; i < count; i++) {
-        const uint8_t* o = blob + SLOT_BLOB_HEAD + i * SLOT_OP_BYTES;
-        p.ops[i].op = o[0];
-        memcpy(&p.ops[i].arg, o + 1, sizeof(float));
-    }
-    if (expr_validate(&p) != EXPR_OK) return false;
+    char name[SLOT_NAME_BYTES];
+    ExprProgram p;
+    if (!slot_blob_decode(blob, len, name, &p)) return false;
 
     RamSlot& s = g_slots[slot];
-    memcpy(s.name, blob + 2, sizeof(s.name));
-    s.name[sizeof(s.name) - 1] = '\0';
+    memcpy(s.name, name, sizeof(s.name));
     s.program = p;
     s.used = true;
     return true;

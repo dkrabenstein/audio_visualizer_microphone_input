@@ -41,8 +41,8 @@ const postForm = (p, body, token = common.TOKEN) => request('POST', p, { token, 
 const t = suite('board api');
 
 // ---- the page's own program fingerprint, to compare with the board's
-const indexHtml = fs.readFileSync(path.join(root, 'data', 'www', 'index.html'), 'utf8');
-const slotHash = new Function(extractFunction(indexHtml, 'slotHash') + '; return slotHash;')();
+const coreJs = fs.readFileSync(path.join(root, 'data', 'www', 'core.js'), 'utf8');
+const slotHash = new Function(extractFunction(coreJs, 'slotHash') + '; return slotHash;')();
 
 // ---- opcodes (src/pattern/expr_ops.h)
 const OP = { CONST: 0, X: 1, T: 2, ADD: 16, SUB: 17, MUL: 18, DIV: 19, ABS: 35, SQRT: 38, SIN: 33 };
