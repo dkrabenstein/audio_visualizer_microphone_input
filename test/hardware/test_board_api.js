@@ -79,7 +79,7 @@ const msg = r => (r.json && r.json.error) || r.text;
       t.eq([r.json.ok, r.json.slot, r.json.ops, r.json.depth], [true, SCRATCH, 3, 2], 'the answer reports slot, 3 ops and depth 2');
       const s = await slotInfo(SCRATCH);
       t.eq([s.used, s.name, s.ops], [true, 'hw_test', 3], 'the slot is used, named and 3 ops long');
-      t.eq(s.hash, slotHash(code), 'the board\'s fingerprint equals the one the web page computes (slotHash in index.html)');
+      t.eq(s.hash, slotHash(code), 'the board\'s fingerprint equals the one the web page computes (slotHash in core.js)');
     });
 
     const refusals = [

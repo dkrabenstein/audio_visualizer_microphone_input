@@ -1,5 +1,5 @@
-// Tests for the page itself (data/www/index.html), without a browser:
-//   - structure: the scripts it loads exist, every inline script is valid JavaScript, ids are unique
+// Tests for the page itself (data/www/index.html and the files it loads), without a browser:
+//   - structure: the scripts and stylesheet it loads exist, every script is valid JavaScript, ids are unique
 //     and every id the scripts look up is in the page
 //   - slotHash() and presetsOnBoard(), the pure functions that decide whether presets are re-uploaded
 const fs = require('fs');
@@ -11,6 +11,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL:', m); } };
 
 const html = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
+const coreJs = fs.readFileSync(path.join(WWW, 'core.js'), 'utf8');   // slotHash / presetsOnBoard live here
 
 // ---- structure
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)].map(m => ({ attrs: m[1], body: m[2] }));
@@ -19,7 +20,13 @@ for (const s of scripts) {
   const src = /\bsrc\s*=\s*"([^"]+)"/.exec(s.attrs);
   if (src) {
     if (src[1] === '/host.js') continue;   // only the laptop server provides it; the board 404s it on purpose
-    ok(fs.existsSync(path.join(WWW, src[1])), 'script ' + src[1] + ' exists in data/www');
+    const file = path.join(WWW, src[1]);
+    ok(fs.existsSync(file), 'script ' + src[1] + ' exists in data/www');
+    if (fs.existsSync(file)) {
+      const text = fs.readFileSync(file, 'utf8');
+      try { new vm.Script(text, { filename: src[1] }); ok(true, ''); } catch (e) { ok(false, src[1] + ' has a syntax error: ' + e.message); }
+      s.body = text;   // the id check below looks inside every local script, not just inline ones
+    }
   } else {
     try { new vm.Script(s.body); ok(true, ''); }
     catch (e) { ok(false, 'inline script has a syntax error: ' + e.message + ' (starts: ' + s.body.trim().slice(0, 50).replace(/\s+/g, ' ') + ')'); }
@@ -31,7 +38,10 @@ const ids = [...html.matchAll(/\bid\s*=\s*"([^"]+)"/g)].map(m => m[1]);
 const dup = ids.filter((id, k) => ids.indexOf(id) !== k);
 ok(dup.length === 0, 'element ids are unique' + (dup.length ? ' (repeated: ' + [...new Set(dup)].join(', ') + ')' : ''));
 
-const body = scripts.filter(s => !/\bsrc\s*=/.test(s.attrs)).map(s => s.body).join('\n');
+const body = scripts.map(s => s.body).join('\n');   // inline scripts, plus the text of each local file loaded above
+
+for (const m of html.matchAll(/<link\b[^>]*\brel\s*=\s*"stylesheet"[^>]*\bhref\s*=\s*"([^"]+)"/g))
+  ok(fs.existsSync(path.join(WWW, m[1])), 'stylesheet ' + m[1] + ' exists in data/www');
 const wanted = new Set();
 for (const m of body.matchAll(/getElementById\(\s*'([^']+)'\s*\)/g)) wanted.add(m[1]);
 for (const m of body.matchAll(/\$\(\s*'#([A-Za-z][\w-]*)'\s*\)/g)) wanted.add(m[1]);
@@ -44,7 +54,7 @@ ok(missing.length === 0, 'every id the scripts look up exists in the page' + (mi
 const ctx = vm.createContext({});
 for (const f of ['compiler.js', 'presets.js'])
   vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), ctx, { filename: f });
-vm.runInContext(extractFunction(html, 'slotHash') + '\n' + extractFunction(html, 'presetsOnBoard'), ctx);
+vm.runInContext(extractFunction(coreJs, 'slotHash') + '\n' + extractFunction(coreJs, 'presetsOnBoard'), ctx);
 const slotHash = vm.runInContext('slotHash', ctx);
 const presetsOnBoard = vm.runInContext('presetsOnBoard', ctx);
 const compile = vm.runInContext('compile', ctx);

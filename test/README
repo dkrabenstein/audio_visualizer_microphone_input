@@ -38,7 +38,7 @@ JavaScript (web page and laptop server)
     test_presets / test_fastled         presets.js and fastled.js
     test_index_html                     structure of the page; slotHash() and presetsOnBoard()
     test_server                         server/server.js, started for real on free ports
-    test_page_*                         the real index.html run in jsdom (see dom_harness.js):
+    test_page_*                         the real index.html (and the scripts it loads) run in jsdom (see dom_harness.js):
                                           token  - API token wrapper, dialog, pairing link
                                           core   - tabs, idle sleep, Custom tab, preset upload, laptop mode
                                           tabs   - Patterns, Basic (wheel, white), Home, power, brightness

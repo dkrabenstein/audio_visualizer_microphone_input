@@ -2,7 +2,7 @@
 // these in step". This test checks they are, by reading both sides:
 //   - the opcode table, ABI version and limits (src/pattern/expr_ops.h  <->  data/www/compiler.js)
 //   - the built-in default pattern (src/pattern/slot_store.cpp slot 0  <->  presets.js PRESETS[0])
-//   - the program fingerprint (programHash() in src/pattern/program_hash.h, built with g++  <->  slotHash() in index.html)
+//   - the program fingerprint (programHash() in src/pattern/program_hash.h, built with g++  <->  slotHash() in core.js)
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -18,7 +18,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL:', m); } 
 const opsH = fs.readFileSync(path.join(root, 'src', 'pattern', 'expr_ops.h'), 'utf8');
 const slotStoreCpp = fs.readFileSync(path.join(root, 'src', 'pattern', 'slot_store.cpp'), 'utf8');   // holds the default pattern
 const networkCpp = fs.readFileSync(path.join(root, 'src', 'net', 'network.cpp'), 'utf8');       // ports and beacon text
-const indexHtml = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
+const coreJs = fs.readFileSync(path.join(WWW, 'core.js'), 'utf8');   // slotHash() lives here
 
 // ---- opcode table
 const cOps = {};
@@ -57,7 +57,7 @@ if (JSON.stringify(defOps) !== JSON.stringify(fromPreset))
   console.log('NOTE: slot 0 in slot_store.cpp and the page compile of the same formula use a different op order, so\n' +
               '      their fingerprints differ and the page uploads slot 0 once on first load. Same results.');
 
-// ---- program fingerprint: slotHash() in index.html vs programHash() in program_hash.h
+// ---- program fingerprint: slotHash() in core.js vs programHash() in program_hash.h
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hash-'));
 try {
   const hashSrc = '#include <stdint.h>\n#include <string.h>\n#include <stdio.h>\n#include "pattern/expr_vm.cpp"\n#include "pattern/program_hash.h"\n' +
@@ -72,7 +72,7 @@ try {
   const b = buildCpp([path.join(dir, 'hash.cpp')], exe, path.join(root, 'src'));
   if (!b.ok) { ok(false, 'could not build the programHash helper: ' + b.message); }
   else {
-    const slotHash = new Function(extractFunction(indexHtml, 'slotHash') + '; return slotHash;')();
+    const slotHash = new Function(extractFunction(coreJs, 'slotHash') + '; return slotHash;')();
     const programs = PRESETS.map(p => compile(p.expr));
     programs.push(compile('1+2'), compile('-x'), compile('0.1+0.2'), compile('pow(2,0.5)*1e-9'), [[0, -0], [1]]);
     const input = programs.map(c => c.length + ' ' + c.map(([op, a]) => op + ' ' + (a === undefined ? 0 : a)).join(' ')).join('\n') + '\n';

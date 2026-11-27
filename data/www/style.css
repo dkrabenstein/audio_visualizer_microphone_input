@@ -1,0 +1,175 @@
+:root{--bg:#0e0f13;--panel:#171922;--line:#282b38;--fg:#e6e8ef;--dim:#a9aec2;
+      --ok:#4ade80;--warn:#facc15;--err:#f87171;--acc:#60a5fa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);background:linear-gradient(180deg,#0a1428 0%,#101322 45%,#121317 100%) fixed;min-height:100vh;color:var(--fg);
+     font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.wrap{max-width:860px;margin:0 auto;padding:20px}
+h1{font-size:19px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
+.sub{color:var(--dim);font-size:14px;margin-bottom:18px}
+.panel{background:var(--panel);border:1px solid var(--line);
+       border-radius:8px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:15px;text-transform:uppercase;
+      letter-spacing:.08em;color:var(--acc);margin-bottom:6px}
+input[type=text],input[type=password]{width:100%;background:#0b0c10;border:1px solid var(--line);
+      color:var(--fg);padding:10px;border-radius:5px;font:inherit}
+input[type=text]:focus,input[type=password]:focus{outline:none;border-color:var(--acc)}
+#status{margin-top:8px;font-size:12px;min-height:18px}
+#status.ok{color:var(--ok)} #status.err{color:var(--err)}
+canvas{width:100%;height:70px;display:block;border-radius:5px;background:#000}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{background:#222634;border:1px solid var(--line);color:var(--fg);
+       padding:8px 14px;border-radius:5px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#0b0c10;border-color:var(--acc);
+       font-weight:600}
+select{background:#0b0c10;border:1px solid var(--line);color:var(--fg);
+       padding:8px;border-radius:5px;font:inherit}
+/* The browser's own arrow sits hard against the right edge, so it is replaced by one drawn 12px in. */
+select{-webkit-appearance:none;appearance:none;padding-right:34px;
+       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23a9aec2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+       background-repeat:no-repeat;background-position:right 12px center}
+.ex{color:var(--acc);cursor:pointer;text-decoration:underline dotted;
+    font-size:12px;margin-right:12px;display:inline-block;margin-top:4px}
+.meta{font-size:13px;color:var(--dim);margin-top:8px}
+/* --- tabs --- */
+.tabbar{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tabbar button{font-size:15px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
+       background:none;color:var(--dim);padding:8px 16px;margin-bottom:-1px}
+.tabbar button:hover{color:var(--fg);border-color:var(--line)}
+.tabbar button.active{background:var(--panel);color:var(--fg);border-color:var(--line);
+       border-bottom:1px solid var(--panel)}
+.tab{display:none}
+.tab.active{display:block}
+.home p{margin:0 0 10px}
+.home ol{margin:0;padding-left:20px}
+.home li{margin-bottom:6px}
+.home .lead{font-size:15px}
+.cards{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}   /* a short last row (the 7th card) is centred */
+.cards .card{flex:0 1 calc((100% - 28px) / 3);min-width:250px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:10px;cursor:pointer;transition:border-color .15s}
+.card:hover{border-color:var(--acc)}
+.card.active{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.card canvas{height:64px;margin-bottom:8px}
+.card .title{font-weight:600;font-size:13px;margin-bottom:2px;color:var(--acc)}
+.card .blurb{font-size:14px;color:var(--dim)}
+#pat-status{font-size:12px;min-height:18px;margin-bottom:10px}
+#pat-status.ok{color:var(--ok)} #pat-status.err{color:var(--err)}
+#target{font-size:13px}
+#target.ok{color:var(--ok)}
+details.manual{margin-top:10px}
+details.manual summary{cursor:pointer;color:var(--dim);font-size:14px;text-transform:uppercase}
+details.manual[open]>summary{margin-bottom:10px}
+details.manual summary:hover{color:var(--fg)}
+details.opts{margin-top:12px}
+details.opts summary{cursor:pointer;color:var(--dim);font-size:13px}
+details.opts summary:hover{color:var(--fg)}
+.opt{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;
+     font-size:12px;margin-top:10px}
+.opt .h{grid-column:1/-1;margin-top:8px;font-size:11px;text-transform:uppercase;
+        letter-spacing:.08em;color:var(--dim)}
+.opt code{color:var(--acc)}
+.opt span{color:var(--dim)}
+.wheelbox{position:relative;width:280px;height:280px;margin:6px auto 10px}
+.wheelbox canvas{width:280px;height:280px;border-radius:50%;cursor:crosshair;touch-action:none}
+#wheel-swatch{position:absolute;left:50%;top:50%;width:120px;height:120px;
+  margin:-60px 0 0 -60px;border-radius:50%;border:1px solid var(--line);background:#222;
+  pointer-events:none}
+#wheel-marker{position:absolute;width:22px;height:22px;border:3px solid #fff;
+  border-radius:50%;box-shadow:0 0 0 2px #000;transform:translate(-50%,-50%);
+  pointer-events:none;display:none}
+#basic-status{font-size:12px;min-height:18px;text-align:center}
+#basic-status.ok{color:var(--ok)} #basic-status.err{color:var(--err)}
+.rangeRow{display:flex;gap:12px;align-items:center}
+.rangeRow input[type=range]{flex:1;accent-color:var(--acc)}
+button:disabled{opacity:.4;cursor:default}
+.welcome{margin:22px 0 30px}
+.welcome-title{font-size:24px;font-weight:600;line-height:1.3;margin-bottom:8px}
+.welcome-text{font-size:16px;color:var(--dim)}
+.start-title{font-size:16px;font-weight:600;margin-bottom:12px}
+.navcards{display:flex;flex-direction:column;gap:10px}
+.navcard{display:block;width:100%;text-align:left;padding:14px 16px;border-radius:8px;
+         background:var(--panel);border:1px solid var(--line);color:var(--fg);cursor:pointer}
+.navcard:hover,.navcard:focus-visible{border-color:var(--acc);outline:none}
+.navcard .nc-title{display:block;font-weight:600;font-size:16px;margin-bottom:2px;color:var(--acc)}
+.navcard .nc-desc{display:block;font-size:14px;color:var(--dim)}
+#home-bar{height:8px;border-radius:4px;margin:6px 0 0}
+.nowcard{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;
+         padding:12px;margin-bottom:26px;border-radius:8px;background:var(--panel);
+         border:1px solid var(--line);color:var(--fg);cursor:pointer}
+.nowcard:hover,.nowcard:focus-visible{border-color:var(--acc);outline:none}
+.nowcard canvas{width:100%;height:40px}
+.now-label{font-size:13px;color:var(--ok)}   /* same lettering and green as the status messages (e.g. patterns loaded) */
+.now-name{font-size:16px;font-weight:600}
+.now-sub{font-size:13px;color:var(--dim)}
+.now-name:empty,.now-sub:empty{display:none}   /* no blank row (and no gap) when there is no text */
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
+.dot.on{background:var(--ok)} .dot.off{background:var(--err)}
+.navcard{display:flex;align-items:center;gap:14px}
+.navcard .nc-text{display:block;flex:1}
+.navcard canvas,.navcard .swatch{flex:none;width:120px;height:36px;border-radius:4px}
+.swatch{display:block;border:1px dashed var(--line);background:transparent}
+.homegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
+#meter{height:90px}
+button.switch[aria-pressed="true"]{background:var(--acc);color:#0b0c10;border-color:var(--acc);font-weight:600}
+@media (max-width:640px){.homegrid{grid-template-columns:1fr}}
+.briRow input[type=range]{flex:0 1 70%}
+.swbox{flex:1;display:flex;justify-content:center;align-items:center}
+details.fold:not([open])>summary{margin-bottom:0!important}
+.tempslider{-webkit-appearance:none;appearance:none;height:9px;border-radius:4.5px;outline:none;cursor:pointer}
+.tempslider::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--acc);box-shadow:0 0 0 1px #000}
+.tempslider::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid var(--acc)}
+#white-temp{flex:0 1 calc(80% - 56px)}   /* same length as the brightness slider's right end */
+.tempslider.off::-webkit-slider-thumb{border-color:var(--dim);opacity:.75}
+.tempslider.off::-moz-range-thumb{border-color:var(--dim);opacity:.75}
+/* Slider cards (white, brightness): extra room below the slider row so the row, and with it the
+   colour square / Lights on button, sits at the vertical middle of the card. The extra space
+   equals the label's height + margin above the row (the white card already has 8px below it). */
+.panel:has(.swbox){padding-bottom:46px}
+.panel:has(#white-temp){padding-bottom:38px}
+#white-swatch{display:inline-block;width:36px;height:36px;border-radius:6px;border:1px solid var(--line);background:#222;flex:none}
+#white-readout{font-size:14px}
+/* Home page: live sound / quick controls cards */
+#tab-home .homegrid label{font-size:17px}
+#pwr{font-size:15px}
+#home-bri-val{font-size:15px}
+/* All tabs: match the Home page look (label, button, title and status sizes) */
+.tab label{font-size:17px}
+.tab .panel button{font-size:15px}
+#bri-val,#pat-bri-val,#adv-bri-val,#tune-margin-val,#tune-ceil-val,#tune-smooth-val{font-size:15px}
+/* "ADJUST" toggles: same look as the "manual override" toggle (14px, dim, brightens on hover) */
+details.fold>summary{font-size:14px!important;color:var(--dim)!important;letter-spacing:normal!important}
+details.fold>summary:hover{color:var(--fg)!important}
+#tune-box details.fold{margin-bottom:10px}
+#tune-box details.fold>summary{text-transform:uppercase}
+/* Line above each dropdown: brighter, a size up, with a blue bar on its left edge.
+   Note inside each dropdown: dim italic tip. (14px minimum on this tab, so only 1px apart.) */
+#tune-box>.meta:not(#tune-status){color:var(--fg);font-size:15px;border-left:3px solid var(--acc);padding-left:10px}
+#tune-box details>.meta{font-style:italic}
+.card .title{font-size:16px}
+#tab-basic .sub,#tab-patterns .sub{font-size:15px}
+#status,#pat-status,#basic-status,#target,.opt,.ex{font-size:13px}
+#basic-status{font-size:15px}
+/* Setup tab: nothing smaller than 14px (the attribute rule catches the 12px inline styles that the
+   page's script writes into the tuning and strip rows) */
+#tab-setup .meta{font-size:14px}
+#tab-setup :not(summary)[style*="font-size:12px"]{font-size:14px!important}
+#tab-setup #tune-box .rangeRow>span:first-child{min-width:170px!important}   /* room for "band 4 750 Hz–1.4k" at 14px */
+#tab-setup #target{font-size:14px}
+/* Custom tab: nothing smaller than 14px */
+#tab-custom #status,#tab-custom .ex,#tab-custom details.opts summary,#tab-custom .opt,#tab-custom .opt .h{font-size:14px}
+/* Phones: the five tabs and the Setup tab's slider rows were wider than a 390px screen, so the
+   browser zoomed the whole page out. Tighten the tab bar and let slider labels sit above their slider. */
+@media (max-width:560px){
+  .wrap{padding:14px}
+  .tabbar{gap:2px;overflow-x:auto}
+  .tabbar button{font-size:13px;padding:8px 7px;white-space:nowrap}
+  #tab-setup #tune-box .rangeRow{flex-wrap:wrap;row-gap:2px}
+  #tab-setup #tune-box .rangeRow>span:first-child{min-width:0!important;flex:0 0 100%}
+  #tab-setup #tune-box .rangeRow input[type=range]{min-width:0}
+}
+@media (max-width:360px){
+  .tabbar button{font-size:12px;padding:8px 5px}
+  .briRow{gap:8px}
+  .briRow .switch{min-width:72px!important}   /* the on/off button's inline min-width pushed the row past 320px */
+}
