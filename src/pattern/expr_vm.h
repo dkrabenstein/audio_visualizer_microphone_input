@@ -6,7 +6,7 @@
 // pre-verified op array.
 
 #pragma once
-#include "expr_ops.h"
+#include "pattern/expr_ops.h"
 #include <stddef.h>
 
 struct ExprOpcode {

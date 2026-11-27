@@ -1,13 +1,13 @@
 // api_guard.cpp -- see api_guard.h
 
-#include "api_guard.h"
-#include "api_guard_logic.h"
+#include "net/api_guard.h"
+#include "net/api_guard_logic.h"
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 
 #include "secrets.h"
-#include "wifi_manager.h"
+#include "net/wifi_manager.h"
 
 #ifdef API_TOKEN
 

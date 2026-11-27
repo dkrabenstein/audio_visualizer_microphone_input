@@ -1,8 +1,8 @@
 // The web page and the firmware each hold their own copy of some things, with comments saying "keep
 // these in step". This test checks they are, by reading both sides:
-//   - the opcode table, ABI version and limits (src/expr_ops.h  <->  data/www/compiler.js)
-//   - the built-in default pattern (src/main.cpp slot 0  <->  presets.js PRESETS[0])
-//   - the program fingerprint (programHash() in src/main.cpp, built with g++  <->  slotHash() in index.html)
+//   - the opcode table, ABI version and limits (src/pattern/expr_ops.h  <->  data/www/compiler.js)
+//   - the built-in default pattern (src/pattern/slot_store.cpp slot 0  <->  presets.js PRESETS[0])
+//   - the program fingerprint (programHash() in src/pattern/program_hash.h, built with g++  <->  slotHash() in core.js)
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -15,9 +15,11 @@ const root = path.join(__dirname, '..', '..');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL:', m); } };
 
-const opsH = fs.readFileSync(path.join(root, 'src', 'expr_ops.h'), 'utf8');
-const mainCpp = fs.readFileSync(path.join(root, 'src', 'main.cpp'), 'utf8');
-const indexHtml = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
+const opsH = fs.readFileSync(path.join(root, 'src', 'pattern', 'expr_ops.h'), 'utf8');
+const slotStoreCpp = fs.readFileSync(path.join(root, 'src', 'pattern', 'slot_store.cpp'), 'utf8');   // holds the default pattern
+const networkCpp = fs.readFileSync(path.join(root, 'src', 'net', 'network.cpp'), 'utf8');       // the beacon text
+const networkH = fs.readFileSync(path.join(root, 'include', 'network_config.h'), 'utf8');        // the ports
+const coreJs = fs.readFileSync(path.join(WWW, 'core.js'), 'utf8');   // slotHash() lives here
 
 // ---- opcode table
 const cOps = {};
@@ -37,12 +39,12 @@ ok(define('EXPR_STACK_MAX') === STACK_MAX, 'stack max: firmware ' + define('EXPR
 // ---- default pattern (slot 0)
 const { PRESETS } = loadScript('presets.js', ['PRESETS']);
 const defOps = [];
-for (const m of mainCpp.matchAll(/defProg\.ops\[(\d+)\]\s*=\s*\{\s*(OP_[A-Z]+)\s*,\s*([-0-9.eE+]+)f?\s*\}/g))
+for (const m of slotStoreCpp.matchAll(/defProg\.ops\[(\d+)\]\s*=\s*\{\s*(OP_[A-Z]+)\s*,\s*([-0-9.eE+]+)f?\s*\}/g))
   defOps[Number(m[1])] = [cOps[m[2].slice(3)], Number(m[3])];
-const countMatch = /defProg\.count\s*=\s*(\d+)/.exec(mainCpp);
-ok(countMatch && defOps.length === Number(countMatch[1]) && defOps.every(Boolean), 'read the default program out of main.cpp (' + defOps.length + ' ops)');
+const countMatch = /defProg\.count\s*=\s*(\d+)/.exec(slotStoreCpp);
+ok(countMatch && defOps.length === Number(countMatch[1]) && defOps.every(Boolean), 'read the default program out of slot_store.cpp (' + defOps.length + ' ops)');
 const fromPreset = compile(PRESETS[0].expr);
-// main.cpp writes "x*0.3", the page compiles "0.3*x": same maths, different op order. So compare what
+// slot_store.cpp writes "x*0.3", the page compiles "0.3*x": same maths, different op order. So compare what
 // the two programs compute, over a sweep of inputs, rather than the op lists.
 let sameValues = true;
 for (let k = 0; k < 60; k++) {
@@ -51,16 +53,15 @@ for (let k = 0; k < 60; k++) {
   const c = { x: k / 59, t: k * 1.37, i: 0, bands, level: r(9), bass: r(10), mid: r(11), treb: r(12) };
   if (Math.abs(evalCode(defOps, c) - evalCode(fromPreset, c)) > 1e-5) sameValues = false;
 }
-ok(sameValues, 'main.cpp default program computes the same as presets.js "' + PRESETS[0].name + '" (' + PRESETS[0].expr + ')');
+ok(sameValues, 'slot_store.cpp default program computes the same as presets.js "' + PRESETS[0].name + '" (' + PRESETS[0].expr + ')');
 if (JSON.stringify(defOps) !== JSON.stringify(fromPreset))
-  console.log('NOTE: slot 0 in main.cpp and the page compile of the same formula use a different op order, so\n' +
+  console.log('NOTE: slot 0 in slot_store.cpp and the page compile of the same formula use a different op order, so\n' +
               '      their fingerprints differ and the page uploads slot 0 once on first load. Same results.');
 
-// ---- program fingerprint: slotHash() in index.html vs programHash() in main.cpp
+// ---- program fingerprint: slotHash() in core.js vs programHash() in program_hash.h
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hash-'));
 try {
-  const hashSrc = '#include <stdint.h>\n#include <string.h>\n#include <stdio.h>\n#include "expr_vm.cpp"\n' +
-    extractFunction(mainCpp, 'programHash', 'static uint32_t ') + '\n' +
+  const hashSrc = '#include <stdint.h>\n#include <string.h>\n#include <stdio.h>\n#include "pattern/expr_vm.cpp"\n#include "pattern/program_hash.h"\n' +
     'int main() { char line[8192];\n' +
     '  while (fgets(line, sizeof line, stdin)) { ExprProgram p{}; int n = 0, pos = 0, cnt = 0;\n' +
     '    if (sscanf(line, "%d%n", &cnt, &n) != 1) return 2; pos += n;\n' +
@@ -72,7 +73,7 @@ try {
   const b = buildCpp([path.join(dir, 'hash.cpp')], exe, path.join(root, 'src'));
   if (!b.ok) { ok(false, 'could not build the programHash helper: ' + b.message); }
   else {
-    const slotHash = new Function(extractFunction(indexHtml, 'slotHash') + '; return slotHash;')();
+    const slotHash = new Function(extractFunction(coreJs, 'slotHash') + '; return slotHash;')();
     const programs = PRESETS.map(p => compile(p.expr));
     programs.push(compile('1+2'), compile('-x'), compile('0.1+0.2'), compile('pow(2,0.5)*1e-9'), [[0, -0], [1]]);
     const input = programs.map(c => c.length + ' ' + c.map(([op, a]) => op + ' ' + (a === undefined ? 0 : a)).join(' ')).join('\n') + '\n';
@@ -83,10 +84,10 @@ try {
   }
 } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp cleanup */ } }
 
-// ---- UDP audio packet: the sender (server/server.js) against the receiver (src/audio_packet.h)
+// ---- UDP audio packet: the sender (server/server.js) against the receiver (src/audio/audio_packet.h)
 {
   const serverJs = fs.readFileSync(path.join(root, 'server', 'server.js'), 'utf8');
-  const packetH = fs.readFileSync(path.join(root, 'src', 'audio_packet.h'), 'utf8');
+  const packetH = fs.readFileSync(path.join(root, 'src', 'audio', 'audio_packet.h'), 'utf8');
 
   // Receiver: field order and sizes from the packed struct.
   const body = /struct __attribute__\(\(packed\)\) AudioPayload \{([\s\S]*?)\};/.exec(packetH);
@@ -107,11 +108,11 @@ try {
 
   // Ports and the discovery beacon text, which both sides spell out.
   const num = (text, re) => Number((re.exec(text) || [])[1]);
-  ok(num(serverJs, /const UDP_PORT = Number\(process\.env\.VIZ_UDP_PORT\) \|\| (\d+);/) === num(mainCpp, /const uint16_t UDP_PORT = (\d+);/), 'UDP audio port: server.js and main.cpp agree');
-  ok(num(serverJs, /const BEACON_PORT = Number\(process\.env\.VIZ_BEACON_PORT\) \|\| (\d+);/) === num(mainCpp, /const uint16_t BEACON_PORT = (\d+);/), 'beacon port: server.js and main.cpp agree');
-  const beaconMain = (/beaconUdp\.write\(\(const uint8_t\*\)"(\w+)", (\d+)\)/.exec(mainCpp) || []);
+  ok(num(serverJs, /const UDP_PORT = Number\(process\.env\.VIZ_UDP_PORT\) \|\| (\d+);/) === num(networkH, /constexpr uint16_t UDP_PORT = (\d+);/), 'UDP audio port: server.js and network_config.h agree');
+  ok(num(serverJs, /const BEACON_PORT = Number\(process\.env\.VIZ_BEACON_PORT\) \|\| (\d+);/) === num(networkH, /constexpr uint16_t BEACON_PORT = (\d+);/), 'beacon port: server.js and network_config.h agree');
+  const beaconMain = (/beaconUdp\.write\(\(const uint8_t\*\)"(\w+)", (\d+)\)/.exec(networkCpp) || []);
   const beaconServer = (/msg\.toString\(\) !== '(\w+)'/.exec(serverJs) || [])[1];
-  ok(beaconMain[1] === beaconServer && Number(beaconMain[2]) === beaconMain[1].length, 'beacon text: main.cpp sends "' + beaconMain[1] + '", server.js listens for "' + beaconServer + '"');
+  ok(beaconMain[1] === beaconServer && Number(beaconMain[2]) === beaconMain[1].length, 'beacon text: network.cpp sends "' + beaconMain[1] + '", server.js listens for "' + beaconServer + '"');
 }
 
 console.log('firmware sync: ' + pass + ' passed, ' + fail + ' failed');

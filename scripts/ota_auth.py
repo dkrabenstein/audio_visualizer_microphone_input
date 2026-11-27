@@ -4,7 +4,7 @@ import re
 Import("env")
 
 text = open(env.subst("$PROJECT_DIR/include/secrets.h"), encoding="utf-8").read()
-m = re.search(r'#define\s+OTA_PASSWORD\s+"([^"]*)"', text)
+m = re.search(r'^\s*#define\s+OTA_PASSWORD\s+"([^"]*)"', text, re.M)
 if not m:
     raise SystemExit("OTA_PASSWORD not found in include/secrets.h")
 env.Append(UPLOAD_FLAGS=["--auth=" + m.group(1)])

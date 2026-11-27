@@ -1,4 +1,4 @@
-// Unit tests for the microphone's signal processing (src/audio_dsp.h): the high-pass filter, the Hann window,
+// Unit tests for the microphone's signal processing (src/audio/audio_dsp.h): the high-pass filter, the Hann window,
 // the FFT, the band levels in dBFS, and the sample ring. Signals are generated here with known answers
 // (a sine of amplitude A reads 20*log10(A) dBFS in its band), so this checks the whole analysis chain
 // without a microphone. Run: pio test -e native -f test_audio_dsp
@@ -7,7 +7,7 @@
 #include <initializer_list>
 #include <math.h>
 #include <stdlib.h>
-#include "audio_dsp.h"
+#include "audio/audio_dsp.h"
 
 static AudioFft fft;
 static float ring[FFT_N];

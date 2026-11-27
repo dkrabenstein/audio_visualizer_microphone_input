@@ -12,8 +12,12 @@ Interim: while the ESP32 web UI is in development, the same page is hosted on th
 
 ## Repository layout
 
-- `src/`: ESP32 firmware. Contains the LED rendering, the signal source (currently noise, later microphone), and the algorithm selection logic.
-- `data/`: The web UI (`data/www/`), the single source of truth. Served from the ESP32's filesystem (upload with `pio run -t uploadfs`) and by the laptop server.
+- `src/`: ESP32 firmware. `main.cpp` is startup only; the rest is in folders, and includes are folder-qualified (`#include "audio/audio_source.h"`).
+  - `audio/`: the signal source (microphone, UDP stream, noise), its DSP, and the UDP packet format.
+  - `pattern/`: the expression VM that runs the lighting algorithms, and the 16 pattern slots (RAM + flash).
+  - `led/`: the render task, strip configuration, and brightness / on-off / white-light state.
+  - `net/`: Wi-Fi, OTA, the web server and its `/api` routes, and the API guard.
+- `data/`: The web UI (`data/www/`: `index.html` markup, `style.css`, and scripts `compiler.js`, `presets.js`, `fastled.js`, `core.js`, `tabs.js`, `setup.js`; load order is in `index.html`), the single source of truth. Served from the ESP32's filesystem (upload with `pio run -t uploadfs`) and by the laptop server.
 - `server/`: Development web server that runs on the laptop and serves `data/www/` directly (no second copy). It also streams simulated audio to the board and serves `/host.js`, which switches the page into laptop mode (shows the ESP32 connection panel).
 - `tools/`: Standalone, working LED algorithms that do not depend on the website. Treat these as the reference implementations for the lighting behavior.
 - `platformio.ini`: Build environments and library dependencies.
@@ -35,6 +39,7 @@ SCK 15
 WS  16
 SD  18
 - Pin assignments should live in one header file. Do not hardcode pin numbers elsewhere.
+- Network names and ports (mDNS hostname, UDP audio port, beacon port) live in `include/network_config.h`; `server/server.js` has matching defaults and a test keeps them in step.
 
 ## Firmware conventions
 

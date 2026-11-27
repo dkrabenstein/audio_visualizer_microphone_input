@@ -29,11 +29,11 @@ function diskInterceptor(laptop) {
 
 const flush = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(r => setImmediate(r)); };
 
-// The slot list a board would report once the page's presets are on it (see presetsOnBoard in index.html).
+// The slot list a board would report once the page's presets are on it (see presetsOnBoard in core.js).
 function boardSlots() {
   const { PRESETS, PRESET_FIRST_SLOT } = loadScript('presets.js', ['PRESETS', 'PRESET_FIRST_SLOT']);
   const { compile } = require('./load_compiler.js');
-  const slotHash = new Function(extractFunction(fs.readFileSync(path.join(WWW, 'index.html'), 'utf8'), 'slotHash') + '; return slotHash;')();
+  const slotHash = new Function(extractFunction(fs.readFileSync(path.join(WWW, 'core.js'), 'utf8'), 'slotHash') + '; return slotHash;')();
   return PRESETS.map((p, n) => { const c = compile(p.expr); return { i: PRESET_FIRST_SLOT + n, used: true, name: p.name, ops: c.length, hash: slotHash(c) }; });
 }
 

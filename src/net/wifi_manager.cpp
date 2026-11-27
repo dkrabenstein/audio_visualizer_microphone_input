@@ -1,7 +1,7 @@
 // wifi_manager.cpp -- see wifi_manager.h
 
-#include "wifi_manager.h"
-#include "json_body.h"
+#include "net/wifi_manager.h"
+#include "net/json_body.h"
 
 #include <WiFi.h>
 #include <DNSServer.h>
@@ -10,6 +10,7 @@
 #include <ArduinoJson.h>
 
 #include "secrets.h"
+#include "network_config.h"
 
 // Password of the setup access point. WPA2 needs at least 8 characters. Override it in secrets.h.
 // The AP only exists while the board has no working network, but anyone in range who knows this can
@@ -43,7 +44,7 @@ static Creds     g_try = {};            // the network being tested
 static bool      g_apUp = false;
 static char      g_apSsid[33] = "";   // an SSID is at most 32 characters
 static char      g_error[96] = "";      // why the last attempt failed, shown in the web UI
-static const char *g_host = "visualizer-esp-32";
+static const char *g_host = MDNS_HOSTNAME;
 static uint32_t  g_deadlineMs = 0;
 static uint32_t  g_retryMs = 0;
 static uint32_t  g_armMs = 0;

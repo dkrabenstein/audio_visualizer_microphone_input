@@ -1,11 +1,11 @@
-// Unit tests for the API guard's decision (src/api_guard_logic.h).
+// Unit tests for the API guard's decision (src/net/api_guard_logic.h).
 // api_guard.cpp only wires this to the web server; the rule itself is tested here.
 // Run: pio test -e native -f test_api_guard
 
 #include <unity.h>
 #include <stdio.h>
 #include <string.h>
-#include "api_guard_logic.h"
+#include "net/api_guard_logic.h"
 
 static const char *TOKEN = "0123456789abcdef0123456789abcdef";
 

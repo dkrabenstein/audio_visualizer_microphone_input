@@ -1,4 +1,4 @@
-// Unit tests for the UDP audio packet (src/audio_packet.h): the 48-byte layout the PC dev server sends, how it
+// Unit tests for the UDP audio packet (src/audio/audio_packet.h): the 48-byte layout the PC dev server sends, how it
 // maps onto AudioFeatures, and what happens to values that are not 0..1 (the UDP port has no token, so anything
 // on the network can send to it). Run: pio test -e native -f test_audio_packet
 
@@ -6,7 +6,7 @@
 #include <initializer_list>
 #include <math.h>
 #include <string.h>
-#include "audio_packet.h"
+#include "audio/audio_packet.h"
 
 void setUp() {}
 void tearDown() {}

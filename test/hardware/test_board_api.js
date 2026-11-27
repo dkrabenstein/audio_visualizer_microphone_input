@@ -41,10 +41,10 @@ const postForm = (p, body, token = common.TOKEN) => request('POST', p, { token, 
 const t = suite('board api');
 
 // ---- the page's own program fingerprint, to compare with the board's
-const indexHtml = fs.readFileSync(path.join(root, 'data', 'www', 'index.html'), 'utf8');
-const slotHash = new Function(extractFunction(indexHtml, 'slotHash') + '; return slotHash;')();
+const coreJs = fs.readFileSync(path.join(root, 'data', 'www', 'core.js'), 'utf8');
+const slotHash = new Function(extractFunction(coreJs, 'slotHash') + '; return slotHash;')();
 
-// ---- opcodes (src/expr_ops.h)
+// ---- opcodes (src/pattern/expr_ops.h)
 const OP = { CONST: 0, X: 1, T: 2, ADD: 16, SUB: 17, MUL: 18, DIV: 19, ABS: 35, SQRT: 38, SIN: 33 };
 const payload = (slot, code, extra = {}) => Object.assign({ abi: 1, slot, name: 'hw_test', code }, extra);
 const slotsNow = async () => (await get('/api/slots')).json;
@@ -79,7 +79,7 @@ const msg = r => (r.json && r.json.error) || r.text;
       t.eq([r.json.ok, r.json.slot, r.json.ops, r.json.depth], [true, SCRATCH, 3, 2], 'the answer reports slot, 3 ops and depth 2');
       const s = await slotInfo(SCRATCH);
       t.eq([s.used, s.name, s.ops], [true, 'hw_test', 3], 'the slot is used, named and 3 ops long');
-      t.eq(s.hash, slotHash(code), 'the board\'s fingerprint equals the one the web page computes (slotHash in index.html)');
+      t.eq(s.hash, slotHash(code), 'the board\'s fingerprint equals the one the web page computes (slotHash in core.js)');
     });
 
     const refusals = [

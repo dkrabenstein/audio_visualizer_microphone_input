@@ -7,7 +7,7 @@
 //              VIZ_PORT   serial port, used only to reset the board between steps
 //
 // What it covers
-//   API guard (src/api_guard.cpp): reads open, POSTs refused without / with a wrong token, accepted with the
+//   API guard (src/net/api_guard.cpp): reads open, POSTs refused without / with a wrong token, accepted with the
 //     right one, HEAD/OPTIONS open, the guard answers before unknown routes, refused requests change nothing.
 //   NVS saving (strip_config.cpp, audio_source.cpp): a live change is lost on reboot, a saved change survives
 //     one, "reset" forgets the saved copy, bad input is refused, tuning values are clamped.

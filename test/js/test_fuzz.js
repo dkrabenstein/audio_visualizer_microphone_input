@@ -2,7 +2,7 @@
 //
 //   reference   the expression tree evaluated directly in double precision (knows nothing of bytecode)
 //   preview     compiler.js compile() + evalCode(), what the browser shows
-//   firmware    the same bytecode run by the real VM (src/expr_vm.cpp, built with g++)
+//   firmware    the same bytecode run by the real VM (src/pattern/expr_vm.cpp, built with g++)
 //
 // reference vs preview catches compiler mistakes (operand order, wrong opcode, precedence); preview vs
 // firmware catches the two evaluators drifting apart. Cases where the answer is ill-conditioned (a rounding

@@ -1,4 +1,4 @@
-// Unit tests for the expression VM (src/expr_vm.cpp), run on the laptop: pio test -e native -f test_vm
+// Unit tests for the expression VM (src/pattern/expr_vm.cpp), run on the laptop: pio test -e native -f test_vm
 //
 // The VM is split in two: expr_validate() proves a program is safe, expr_eval() then runs it with no
 // checks at all. So the tests cover (1) everything the validator must reject, and (2) the value every
@@ -7,7 +7,7 @@
 #include <unity.h>
 #include <initializer_list>
 #include <math.h>
-#include "expr_vm.cpp"   // compiled straight from src/ so it is exactly the firmware's code
+#include "pattern/expr_vm.cpp"   // compiled straight from src/ so it is exactly the firmware's code
 
 static const float BANDS[8] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
 static ExprCtx ctx;

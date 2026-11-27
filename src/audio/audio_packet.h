@@ -6,7 +6,7 @@
 // The ESP32 is little-endian, so the struct can be filled straight from the packet bytes.
 
 #pragma once
-#include "audio_source.h"
+#include "audio/audio_source.h"
 #include <math.h>
 #include <stddef.h>
 

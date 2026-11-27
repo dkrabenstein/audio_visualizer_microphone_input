@@ -2,7 +2,7 @@
 // so it can be unit tested on the laptop (see test/test_audio). audio_source.cpp calls these.
 
 #pragma once
-#include "audio_source.h"
+#include "audio/audio_source.h"
 #include <math.h>
 
 // Smallest ceiling-to-floor span in dB. Avoids dividing by ~0 when the room is as quiet as the floor.
