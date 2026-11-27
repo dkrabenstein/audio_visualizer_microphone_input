@@ -5,7 +5,7 @@
 
 #pragma once
 #include <stdint.h>
-#include "expr_vm.h"
+#include "pattern/expr_vm.h"
 
 #define NUM_SLOTS 16
 

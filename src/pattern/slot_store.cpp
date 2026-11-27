@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <Preferences.h>
-#include "slot_store.h"
+#include "pattern/slot_store.h"
 
 // ---------------------------------------------------------------- RAM Pattern Storage
 static RamSlot g_slots[NUM_SLOTS] = {};

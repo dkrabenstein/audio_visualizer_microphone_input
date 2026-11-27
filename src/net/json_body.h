@@ -7,7 +7,7 @@
 
 #pragma once
 #include <ESPAsyncWebServer.h>
-#include "param_parse.h"
+#include "net/param_parse.h"
 
 // ---- Form / query parameters (the small POST routes: /api/select, /api/white, /api/power, /api/brightness) ----
 

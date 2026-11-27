@@ -3,7 +3,7 @@
 #pragma once
 #include <stdint.h>
 #include <string.h>
-#include "expr_vm.h"
+#include "pattern/expr_vm.h"
 
 // A fingerprint of a program's contents (FNV-1a, 32 bit, over each op's code byte and its four
 // argument bytes, little-endian). /api/slots publishes it so the web page can tell whether the

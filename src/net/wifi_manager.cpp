@@ -1,7 +1,7 @@
 // wifi_manager.cpp -- see wifi_manager.h
 
-#include "wifi_manager.h"
-#include "json_body.h"
+#include "net/wifi_manager.h"
+#include "net/json_body.h"
 
 #include <WiFi.h>
 #include <DNSServer.h>

@@ -5,17 +5,17 @@
 #include <ArduinoJson.h>
 #include <esp_system.h>
 #include <esp_timer.h>
-#include "audio_source.h"
-#include "expr_vm.h"
-#include "strip_config.h"
-#include "wifi_manager.h"
-#include "api_guard.h"
-#include "json_body.h"
-#include "slot_store.h"
-#include "program_hash.h"
-#include "light_state.h"
-#include "render.h"
-#include "http_routes.h"
+#include "audio/audio_source.h"
+#include "pattern/expr_vm.h"
+#include "led/strip_config.h"
+#include "net/wifi_manager.h"
+#include "net/api_guard.h"
+#include "net/json_body.h"
+#include "pattern/slot_store.h"
+#include "pattern/program_hash.h"
+#include "led/light_state.h"
+#include "led/render.h"
+#include "net/http_routes.h"
 
 // HTTP connection cap. Every open TCP connection costs lwIP buffers and AsyncTCP work on core 0, and
 // that work competes with FastLED's RMT interrupt. With many browser pages open the board stalled and

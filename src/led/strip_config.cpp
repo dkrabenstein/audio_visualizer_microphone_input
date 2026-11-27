@@ -1,6 +1,6 @@
 // strip_config.cpp -- see strip_config.h
 
-#include "strip_config.h"
+#include "led/strip_config.h"
 
 #include <Arduino.h>
 #include <Preferences.h>

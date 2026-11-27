@@ -8,16 +8,16 @@ C++ (firmware logic, run on the laptop with PlatformIO's native platform + Unity
     pio test -e native -f test_vm       one suite
 
     test_vm            expression VM: validator, every opcode, guarded maths, limits, and random programs
-                       (valid ones always give a finite value; garbage is rejected or runs safely) (src/expr_vm.cpp)
-    test_strip_config  LED strip length / direction clamping (src/strip_config.h)
-    test_api_guard     API token comparison and the allow/refuse rule (src/api_guard_logic.h)
-    test_audio         microphone maths: dB -> 0..1, band means, smoothing, tuning clamps (src/audio_math.h)
+                       (valid ones always give a finite value; garbage is rejected or runs safely) (src/pattern/expr_vm.cpp)
+    test_strip_config  LED strip length / direction clamping (src/led/strip_config.h)
+    test_api_guard     API token comparison and the allow/refuse rule (src/net/api_guard_logic.h)
+    test_audio         microphone maths: dB -> 0..1, band means, smoothing, tuning clamps (src/audio/audio_math.h)
     test_audio_packet  the 48-byte UDP audio packet from the PC server: layout, field order, NaN/huge values
-                       are cleaned to 0..1 (src/audio_packet.h)
+                       are cleaned to 0..1 (src/audio/audio_packet.h)
     test_render        where each LED sits along its strip (0..1, reversed strips, one-LED strips) and how a
-                       pattern value becomes a hue byte (src/render_math.h)
+                       pattern value becomes a hue byte (src/led/render_math.h)
     test_audio_dsp     microphone signal processing: 90 Hz high-pass, Hann window, FFT, band levels, the
-                       sample ring (src/audio_dsp.h). Generated sine waves with known answers, no microphone.
+                       sample ring (src/audio/audio_dsp.h). Generated sine waves with known answers, no microphone.
 
     The logic under test lives in headers/files without Arduino or FreeRTOS includes, so it compiles
     on the laptop. The thin hardware wrappers (api_guard.cpp, the I2S capture) are not covered here.

@@ -6,13 +6,13 @@
 #include <ArduinoOTA.h>
 #include <esp_system.h>
 #include "secrets.h"
-#include "audio_source.h"
-#include "audio_packet.h"
-#include "wifi_manager.h"
-#include "light_state.h"
-#include "render.h"
-#include "http_routes.h"
-#include "network.h"
+#include "audio/audio_source.h"
+#include "audio/audio_packet.h"
+#include "net/wifi_manager.h"
+#include "led/light_state.h"
+#include "led/render.h"
+#include "net/http_routes.h"
+#include "net/network.h"
 
 // ---------------------------------------------------------------- Network Config
 const uint16_t UDP_PORT = 49152;

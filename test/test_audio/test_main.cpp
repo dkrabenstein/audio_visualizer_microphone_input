@@ -1,11 +1,11 @@
-// Unit tests for the microphone pipeline's pure arithmetic (src/audio_math.h): dB -> 0..1 mapping,
+// Unit tests for the microphone pipeline's pure arithmetic (src/audio/audio_math.h): dB -> 0..1 mapping,
 // level/bass/mid/treb aggregation, smoothing, and tuning clamps. The I2S capture and FFT need the
 // board; these functions are what turns the FFT's output into the values the lights react to.
 // Run: pio test -e native -f test_audio
 
 #include <unity.h>
 #include <math.h>
-#include "audio_math.h"
+#include "audio/audio_math.h"
 
 void setUp() {}
 void tearDown() {}

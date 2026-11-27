@@ -1,4 +1,4 @@
-// Unit tests for the render maths (src/render_math.h): where each LED sits along its strip (including reversed
+// Unit tests for the render maths (src/led/render_math.h): where each LED sits along its strip (including reversed
 // strips and one-LED strips) and how a pattern's value becomes a hue byte. These are the exact functions the render
 // loop in main.cpp calls. Run: pio test -e native -f test_render
 
@@ -6,8 +6,8 @@
 #include <initializer_list>
 #include <math.h>
 #include <stdio.h>
-#include "render_math.h"
-#include "strip_config.h"
+#include "led/render_math.h"
+#include "led/strip_config.h"
 
 void setUp() {}
 void tearDown() {}

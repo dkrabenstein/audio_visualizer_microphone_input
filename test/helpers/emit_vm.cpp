@@ -1,11 +1,11 @@
-// Differential-test helper: evaluates programs with the firmware's real VM (src/expr_vm.cpp).
+// Differential-test helper: evaluates programs with the firmware's real VM (src/pattern/expr_vm.cpp).
 //
 // Reads lines from stdin, one program per line:
 //   x t idx level bass mid treb b0 b1 b2 b3 b4 b5 b6 b7 nOps op arg op arg ...
 // and prints one result per line (%.9g), or "INVALID <error>" if expr_validate rejects the program.
 // test/js/test_differential.js compiles the same expressions with compiler.js and compares.
 #include <stdio.h>
-#include "expr_vm.cpp"
+#include "pattern/expr_vm.cpp"
 
 int main() {
     expr_init();

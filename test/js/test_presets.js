@@ -12,7 +12,7 @@ const { PRESETS, PRESET_FIRST_SLOT, ADVANCED_SLOT, BASIC_SLOT, WHITE_MIN_K, WHIT
     ['PRESETS', 'PRESET_FIRST_SLOT', 'ADVANCED_SLOT', 'BASIC_SLOT', 'WHITE_MIN_K', 'WHITE_MAX_K', 'whiteRGB', 'whiteName']);
 
 // Limits live in the firmware header; read them so the test follows the firmware.
-const ops = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'expr_ops.h'), 'utf8');
+const ops = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'pattern', 'expr_ops.h'), 'utf8');
 const define = n => Number(new RegExp('#define\\s+' + n + '\\s+(\\d+)').exec(ops)[1]);
 const NUM_SLOTS = define('EXPR_NUM_SLOTS'), NAME_MAX = define('EXPR_NAME_MAX');
 

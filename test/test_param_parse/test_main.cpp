@@ -1,6 +1,6 @@
-// Strict whole-number parsing for API parameters (src/param_parse.h).
+// Strict whole-number parsing for API parameters (src/net/param_parse.h).
 #include <unity.h>
-#include "param_parse.h"
+#include "net/param_parse.h"
 
 void setUp() {}
 void tearDown() {}

@@ -1,5 +1,5 @@
 // Differential test: the browser preview (compiler.js evalCode) must give the same numbers as the
-// firmware's VM (src/expr_vm.cpp). Each expression is compiled by compiler.js, then evaluated twice:
+// firmware's VM (src/pattern/expr_vm.cpp). Each expression is compiled by compiler.js, then evaluated twice:
 // once in JS, once by test/helpers/emit_vm.cpp (built with g++ and fed the same bytecode).
 // A mismatch means the preview shows something the lights will not do, or the opcode tables differ.
 const { spawnSync } = require('child_process');

@@ -44,7 +44,7 @@ const t = suite('board api');
 const indexHtml = fs.readFileSync(path.join(root, 'data', 'www', 'index.html'), 'utf8');
 const slotHash = new Function(extractFunction(indexHtml, 'slotHash') + '; return slotHash;')();
 
-// ---- opcodes (src/expr_ops.h)
+// ---- opcodes (src/pattern/expr_ops.h)
 const OP = { CONST: 0, X: 1, T: 2, ADD: 16, SUB: 17, MUL: 18, DIV: 19, ABS: 35, SQRT: 38, SIN: 33 };
 const payload = (slot, code, extra = {}) => Object.assign({ abi: 1, slot, name: 'hw_test', code }, extra);
 const slotsNow = async () => (await get('/api/slots')).json;

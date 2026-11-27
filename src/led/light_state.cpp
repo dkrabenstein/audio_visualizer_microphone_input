@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <math.h>
-#include "light_state.h"
-#include "slot_store.h"
+#include "led/light_state.h"
+#include "pattern/slot_store.h"
 
 // ---------------------------------------------------------------- White light
 // WS2812B LEDs have no white chip: "white" is red + green + blue mixed, and the mix sets how

@@ -1,9 +1,9 @@
-// Unit tests for the pure part of src/strip_config.h: strip_config_sanitized().
+// Unit tests for the pure part of src/led/strip_config.h: strip_config_sanitized().
 // strip_config_set() runs every incoming config through it. The NVS save/load side needs the board.
 // Run: pio test -e native -f test_strip_config
 
 #include <unity.h>
-#include "strip_config.h"
+#include "led/strip_config.h"
 
 void setUp() {}
 void tearDown() {}

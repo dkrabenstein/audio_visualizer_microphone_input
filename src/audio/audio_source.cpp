@@ -4,9 +4,9 @@
 //   DMM-4026-B (24-bit I2S, left slot) -> 1024-pt Hann-windowed FFT (50% overlap)
 //   -> 8 log-spaced bands -> dB -> adaptive 0..1 mapping -> attack/decay smoothing
 
-#include "audio_source.h"
-#include "audio_math.h"
-#include "audio_dsp.h"
+#include "audio/audio_source.h"
+#include "audio/audio_math.h"
+#include "audio/audio_dsp.h"
 #include "pins.h"
 
 #include <Arduino.h>

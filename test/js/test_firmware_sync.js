@@ -1,8 +1,8 @@
 // The web page and the firmware each hold their own copy of some things, with comments saying "keep
 // these in step". This test checks they are, by reading both sides:
-//   - the opcode table, ABI version and limits (src/expr_ops.h  <->  data/www/compiler.js)
-//   - the built-in default pattern (src/slot_store.cpp slot 0  <->  presets.js PRESETS[0])
-//   - the program fingerprint (programHash() in src/program_hash.h, built with g++  <->  slotHash() in index.html)
+//   - the opcode table, ABI version and limits (src/pattern/expr_ops.h  <->  data/www/compiler.js)
+//   - the built-in default pattern (src/pattern/slot_store.cpp slot 0  <->  presets.js PRESETS[0])
+//   - the program fingerprint (programHash() in src/pattern/program_hash.h, built with g++  <->  slotHash() in index.html)
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -15,9 +15,9 @@ const root = path.join(__dirname, '..', '..');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL:', m); } };
 
-const opsH = fs.readFileSync(path.join(root, 'src', 'expr_ops.h'), 'utf8');
-const slotStoreCpp = fs.readFileSync(path.join(root, 'src', 'slot_store.cpp'), 'utf8');   // holds the default pattern
-const networkCpp = fs.readFileSync(path.join(root, 'src', 'network.cpp'), 'utf8');       // ports and beacon text
+const opsH = fs.readFileSync(path.join(root, 'src', 'pattern', 'expr_ops.h'), 'utf8');
+const slotStoreCpp = fs.readFileSync(path.join(root, 'src', 'pattern', 'slot_store.cpp'), 'utf8');   // holds the default pattern
+const networkCpp = fs.readFileSync(path.join(root, 'src', 'net', 'network.cpp'), 'utf8');       // ports and beacon text
 const indexHtml = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
 
 // ---- opcode table
@@ -60,7 +60,7 @@ if (JSON.stringify(defOps) !== JSON.stringify(fromPreset))
 // ---- program fingerprint: slotHash() in index.html vs programHash() in program_hash.h
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hash-'));
 try {
-  const hashSrc = '#include <stdint.h>\n#include <string.h>\n#include <stdio.h>\n#include "expr_vm.cpp"\n#include "program_hash.h"\n' +
+  const hashSrc = '#include <stdint.h>\n#include <string.h>\n#include <stdio.h>\n#include "pattern/expr_vm.cpp"\n#include "pattern/program_hash.h"\n' +
     'int main() { char line[8192];\n' +
     '  while (fgets(line, sizeof line, stdin)) { ExprProgram p{}; int n = 0, pos = 0, cnt = 0;\n' +
     '    if (sscanf(line, "%d%n", &cnt, &n) != 1) return 2; pos += n;\n' +
@@ -83,10 +83,10 @@ try {
   }
 } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp cleanup */ } }
 
-// ---- UDP audio packet: the sender (server/server.js) against the receiver (src/audio_packet.h)
+// ---- UDP audio packet: the sender (server/server.js) against the receiver (src/audio/audio_packet.h)
 {
   const serverJs = fs.readFileSync(path.join(root, 'server', 'server.js'), 'utf8');
-  const packetH = fs.readFileSync(path.join(root, 'src', 'audio_packet.h'), 'utf8');
+  const packetH = fs.readFileSync(path.join(root, 'src', 'audio', 'audio_packet.h'), 'utf8');
 
   // Receiver: field order and sizes from the packed struct.
   const body = /struct __attribute__\(\(packed\)\) AudioPayload \{([\s\S]*?)\};/.exec(packetH);

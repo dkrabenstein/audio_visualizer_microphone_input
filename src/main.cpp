@@ -9,12 +9,12 @@
 // NVS is separate, so uploadfs does not erase saved patterns.
 
 #include <Arduino.h>
-#include "expr_vm.h"
-#include "audio_source.h"
-#include "slot_store.h"
-#include "light_state.h"
-#include "render.h"
-#include "network.h"
+#include "pattern/expr_vm.h"
+#include "audio/audio_source.h"
+#include "pattern/slot_store.h"
+#include "led/light_state.h"
+#include "led/render.h"
+#include "net/network.h"
 
 // Audio source: on-board I2S mic by default. Build with -DAUDIO_USE_UDP to take
 // features from the PC's UDP stream instead (handy for testing without a mic).

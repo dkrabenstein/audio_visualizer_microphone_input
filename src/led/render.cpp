@@ -1,13 +1,13 @@
 #include <Arduino.h>
 #include <FastLED.h>
 #include "pins.h"
-#include "expr_vm.h"
-#include "audio_source.h"
-#include "render_math.h"
-#include "strip_config.h"
-#include "slot_store.h"
-#include "light_state.h"
-#include "render.h"
+#include "pattern/expr_vm.h"
+#include "audio/audio_source.h"
+#include "led/render_math.h"
+#include "led/strip_config.h"
+#include "pattern/slot_store.h"
+#include "led/light_state.h"
+#include "led/render.h"
 
 // ---------------------------------------------------------------- LED Config
 // How many LEDs each strip drives, and which end is x=0, come from strip_config.h
