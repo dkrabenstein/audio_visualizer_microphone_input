@@ -65,19 +65,9 @@ spectrum bars (tested)
 bass bloom (tested)
 .55 + 12*sat(bass*level*.5)*tri(x)
 
+Are there any tests that should be put in the tests directory as unit tests? Or would I put unit tests somewhere else?
 
-
-Commit and push changes and make a pull request for the branch including the changes to readme
-
-accept pull request
-
-clear claude
-
-Update main to relect the online version. Make a new branch from main called feature/diagnostics-panel and checkout the branch. Push the branch to online and set it as the upstream branch.
-
-3. A diagnostics panel. Show uptime, reset reason, free heap, Wi-Fi signal strength and the refused-connection count. The reset reason would have told us about the panics without a USB cable. It's cheap to add as an /api/status endpoint plus a section on the Setup tab. Add this in the style of the current website.
-
-make sure website looks good
+Update main to relect the online version. Make a new branch from main called feature/independent-strips and checkout the branch. Push the branch to online and set it as the upstream branch.
 
 - Per-strip patterns.
 Add firmware capability for changing each LED strip independently
@@ -98,7 +88,6 @@ Is there any additional functionallity that would be worth adding?
 
 - ask about adding tests
 Are there any more tests that should be run?
-Are there any tests that should be put in the tests directory
 
 - ask about refactoring
 Is there any refactoring that needs to be done?
