@@ -169,9 +169,9 @@ static bool ram_store_save(uint8_t slot, const char* name, const ExprProgram* p)
 
 // ---------------------------------------------------------------- Network Config
 const uint16_t UDP_PORT = 49152;
-// Advertised over mDNS, so the board is reachable as http://visualizer.local
+// Advertised over mDNS, so the board is reachable as http://visualizer-esp-32.local
 // whatever IP DHCP hands out.
-const char* MDNS_HOSTNAME = "visualizer";
+const char* MDNS_HOSTNAME = "visualizer-esp-32";
 // Presence beacon: the board broadcasts a tiny packet so the PC server learns
 // the current IP within seconds of any DHCP change, without relying on mDNS.
 const uint16_t BEACON_PORT = 49153;

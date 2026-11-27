@@ -1,7 +1,7 @@
 // wifi_manager.h -- Wi-Fi credentials in flash, plus a setup access point as the fallback.
 //
 // The board no longer has its network compiled in. It joins the network saved in NVS (flash). If
-// there is none, or it can't be reached, the board opens its own access point ("Visualizer-XXXX")
+// there is none, or it can't be reached, the board opens its own access point ("visualizer-esp-32-XXXX")
 // and serves the web UI from it, so the network can be chosen from a phone or laptop without
 // reflashing. As soon as the saved network works again the access point is switched off.
 //

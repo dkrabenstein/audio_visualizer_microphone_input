@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prints the pairing link for the web UI, built from API_TOKEN in include/secrets.h.
 
-    python scripts/pair_link.py                 -> http://visualizer.local/#token=...
+    python scripts/pair_link.py                 -> http://visualizer-esp-32.local/#token=...
     python scripts/pair_link.py 192.168.1.82    -> http://192.168.1.82/#token=...
     python scripts/pair_link.py --qr            -> also draws a QR code (needs: pip install qrcode)
 
@@ -24,7 +24,7 @@ if not m:
     sys.exit("API_TOKEN is not defined in include/secrets.h")
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
-host = args[0] if args else "visualizer.local"
+host = args[0] if args else "visualizer-esp-32.local"
 link = f"http://{host}/#token={m.group(1)}"
 print(link)
 

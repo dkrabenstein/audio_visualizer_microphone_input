@@ -407,7 +407,7 @@ details.fold>summary:hover{color:var(--fg)!important}
     <details class="manual">
       <summary>manual override</summary>
       <div class="row" style="margin-top:8px">
-        <input id="esp_ip" type="text" value="visualizer.local" style="width:180px">
+        <input id="esp_ip" type="text" value="visualizer-esp-32.local" style="width:180px">
         <button id="save_ip">Use this address</button>
         <button id="auto_ip">Auto-detect</button>
       </div>
@@ -720,7 +720,7 @@ if (ON_LAPTOP) espUrl = () => 'http://' + (espIp || $('#esp_ip').value);
 const apiBase = () => (typeof espUrl === 'function' ? espUrl() : '');
 if (ON_LAPTOP) $('#conn-panel').style.display = '';
 
-const DEFAULT_HOST = 'visualizer.local';
+const DEFAULT_HOST = 'visualizer-esp-32.local';
 let lastIp = null;
 
 function showTarget(j) {
@@ -1630,7 +1630,7 @@ if (!ON_LAPTOP) uploadPresets();
 </script>
 <script>
 // ---- Wi-Fi network (Setup tab) ----
-// Talks to /api/wifi. If the board cannot join its network it opens its own "Visualizer-XXXX"
+// Talks to /api/wifi. If the board cannot join its network it opens its own "visualizer-esp-32-XXXX"
 // access point and serves this same page, and this panel is where the network gets chosen.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -1738,12 +1738,12 @@ if (!ON_LAPTOP) uploadPresets();
         if (j.state !== 'trying') { say(j.error || 'could not join that network', true); break; }
         say('Testing "' + name + '"...');
       } else if (misses >= 3 && viaAp) {
-        say('The board left its setup network, so it probably joined "' + name + '". Reconnect this device to that network, then open http://visualizer.local (or the IP shown on the serial monitor).');
+        say('The board left its setup network, so it probably joined "' + name + '". Reconnect this device to that network, then open http://visualizer-esp-32.local (or the IP shown on the serial monitor).');
         break;
       }
     }
     if (!status.textContent || status.textContent.indexOf('Testing') === 0) {
-      say('No answer from the board. If it joined the new network, open http://visualizer.local on that network.', true);
+      say('No answer from the board. If it joined the new network, open http://visualizer-esp-32.local on that network.', true);
     }
     applying = false; connectBtn.disabled = false;
   });
@@ -1752,7 +1752,7 @@ if (!ON_LAPTOP) uploadPresets();
     if (!confirm('Forget the saved network? The board will open its setup network, and you will have to join it to choose a new one.')) return;
     try {
       await fetch(base() + '/api/wifi/forget', { method: 'POST' });
-      say('Forgotten. Join the setup network (Visualizer-XXXX) to choose a new one.');
+      say('Forgotten. Join the setup network (visualizer-esp-32-XXXX) to choose a new one.');
     } catch (e) { say('board not reachable', true); }
   });
 

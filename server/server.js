@@ -12,7 +12,7 @@ const net = require('net');
 // --- Configuration ---
 // ESP32 address: its mDNS name by default, or `node server.js <host-or-ip>`,
 // or update it from the UI. The ESP32 prints both on the serial monitor at boot.
-let ESP32_HOST = process.argv[2] || 'visualizer.local';
+let ESP32_HOST = process.argv[2] || 'visualizer-esp-32.local';
 const UDP_PORT = 49152;
 const HTTP_PORT = 3000;
 // The web UI lives in data/www (flashed to the ESP32 with `pio run -t uploadfs`) and is served from
@@ -154,7 +154,7 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ host: ESP32_HOST, ip: ESP32_IP, source: targetSource() }));
   }
 
-  // Body: { host: "visualizer.local" | "192.168.1.77" }. Replies once the
+  // Body: { host: "visualizer-esp-32.local" | "192.168.1.77" }. Replies once the
   // lookup finishes, so the UI immediately learns whether the name resolved.
   if (req.method === 'POST' && req.url === '/api/config') {
     let body = '';

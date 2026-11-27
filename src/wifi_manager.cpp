@@ -14,7 +14,7 @@
 // The AP only exists while the board has no working network, but anyone in range who knows this can
 // join it and point the board at another network, so pick your own if the board will be handed out.
 #ifndef AP_PASSWORD
-#define AP_PASSWORD "visualizer"
+#define AP_PASSWORD "visualizer-esp-32"
 #endif
 
 static const char     *NVS_NAMESPACE      = "wifi";
@@ -40,9 +40,9 @@ static volatile WmState g_state = WM_CONNECTING;
 static Creds     g_cur = {};            // the saved network ("" ssid = none)
 static Creds     g_try = {};            // the network being tested
 static bool      g_apUp = false;
-static char      g_apSsid[24] = "";
+static char      g_apSsid[33] = "";   // an SSID is at most 32 characters
 static char      g_error[96] = "";      // why the last attempt failed, shown in the web UI
-static const char *g_host = "visualizer";
+static const char *g_host = "visualizer-esp-32";
 static uint32_t  g_deadlineMs = 0;
 static uint32_t  g_retryMs = 0;
 static uint32_t  g_armMs = 0;
@@ -109,7 +109,7 @@ static void startAp() {
     if (g_apUp) return;
     uint8_t mac[6];
     WiFi.macAddress(mac);
-    snprintf(g_apSsid, sizeof(g_apSsid), "Visualizer-%02X%02X", mac[4], mac[5]);
+    snprintf(g_apSsid, sizeof(g_apSsid), "visualizer-esp-32-%02X%02X", mac[4], mac[5]);
     WiFi.mode(WIFI_AP_STA);        // keep the STA half alive so the saved network can still be retried
     // Channel 1, visible, at most 3 clients: this is a setup tool, not a hotspot.
     WiFi.softAP(g_apSsid, AP_PASSWORD, 1, 0, 3);
@@ -218,6 +218,9 @@ static void handleScan(AsyncWebServerRequest *r) {
 void wifi_manager_begin(const char *mdnsHost) {
     if (mdnsHost) g_host = mdnsHost;
     WiFi.persistent(false);        // the credentials live in our own NVS namespace, not the SDK's
+    // The name the router lists for this device (and, on most routers, resolves on the home network).
+    // Must be set before the radio is started.
+    WiFi.setHostname(g_host);
     WiFi.mode(WIFI_STA);
     loadCreds();
     connectSaved();
